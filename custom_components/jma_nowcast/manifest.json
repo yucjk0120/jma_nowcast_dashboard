@@ -1,0 +1,12 @@
+{
+  "domain": "jma_nowcast",
+  "name": "JMA Nowcast 降水予測",
+  "version": "1.0.0",
+  "documentation": "https://github.com/yucjk0120/jma_nowcast_dashboard",
+  "issue_tracker": "https://github.com/yucjk0120/jma_nowcast_dashboard/issues",
+  "requirements": ["Pillow>=9.0.0"],
+  "dependencies": [],
+  "codeowners": ["@yucjk0120"],
+  "iot_class": "cloud_polling",
+  "config_flow": true
+}

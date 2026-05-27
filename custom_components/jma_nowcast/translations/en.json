@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "JMA Nowcast Setup",
+        "description": "Set up Japan Meteorological Agency High-Resolution Precipitation Nowcast.\nDetailed settings (forecast minutes, threshold, etc.) can be changed via Configure after setup.",
+        "data": {
+          "use_ha_home": "Use HA Home location",
+          "latitude": "Latitude (custom location)",
+          "longitude": "Longitude (custom location)"
+        },
+        "data_description": {
+          "use_ha_home": "When ON, automatically uses coordinates from HA Settings > Home Zone",
+          "latitude": "Used when 'Use HA Home location' is OFF",
+          "longitude": "Used when 'Use HA Home location' is OFF"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "JMA Nowcast is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "JMA Nowcast Settings",
+        "data": {
+          "use_ha_home": "Use HA Home location",
+          "latitude": "Latitude (custom location)",
+          "longitude": "Longitude (custom location)",
+          "forecast_minutes": "Forecast minutes to monitor",
+          "threshold_mm": "Alert threshold (mm/h)",
+          "radius_pixels": "Check radius (px)",
+          "scan_interval": "Update interval (min)"
+        },
+        "data_description": {
+          "use_ha_home": "When ON, automatically uses coordinates from HA Settings > Home Zone",
+          "latitude": "Used when 'Use HA Home location' is OFF",
+          "longitude": "Used when 'Use HA Home location' is OFF",
+          "forecast_minutes": "Select one or more future time windows to check (up to 60 min ahead)",
+          "threshold_mm": "Rainfall intensity threshold for alert. 1.0=light rain, 5.0=moderate rain",
+          "radius_pixels": "Pixels around location to check. 3px ≈ 3km radius at zoom=10",
+          "scan_interval": "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "rain_detected": { "name": "Rain Detected" }
+    },
+    "sensor": {
+      "first_rain_minutes": { "name": "First Rain In" },
+      "summary":            { "name": "Forecast Summary" }
+    },
+    "button": {
+      "refresh": { "name": "Check Now" }
+    }
+  },
+  "selector": {
+    "forecast_minutes": {
+      "options": {
+        "10": "10 minutes",
+        "20": "20 minutes",
+        "30": "30 minutes",
+        "60": "60 minutes"
+      }
+    }
+  }
+}
