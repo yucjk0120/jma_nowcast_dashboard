@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -11,18 +12,22 @@ from .const import (
     CONF_FORECAST_MINUTES,
     CONF_LATITUDE,
     CONF_LONGITUDE,
+    CONF_NO_RAIN_COOLDOWN_MIN,
+    CONF_POST_RAIN_COOLDOWN_MIN,
     CONF_RADIUS_METERS,
-    CONF_RADIUS_PIXELS,  # legacy
+    CONF_RADIUS_PIXELS,        # legacy (v1)
     CONF_SCAN_INTERVAL,
     CONF_THRESHOLD_MM,
     CONF_TRIGGER_COVERAGE,
-    CONF_USE_HA_HOME,    # legacy
+    CONF_USE_HA_HOME,          # legacy (v1)
     DEFAULT_FORECAST_MINUTES,
     DEFAULT_RADIUS_METERS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_THRESHOLD_MM,
     DEFAULT_TRIGGER_COVERAGE,
     DOMAIN,
+    MIGRATION_NO_RAIN_COOLDOWN_MIN,
+    MIGRATION_POST_RAIN_COOLDOWN_MIN,
     ZOOM,
 )
 from .coordinator import JmaNowcastCoordinator
@@ -50,6 +55,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         threshold_mm=float(cfg.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
         radius_meters=int(cfg.get(CONF_RADIUS_METERS, DEFAULT_RADIUS_METERS)),
         trigger_coverage=str(cfg.get(CONF_TRIGGER_COVERAGE, DEFAULT_TRIGGER_COVERAGE)),
+        no_rain_cooldown_min=int(cfg.get(CONF_NO_RAIN_COOLDOWN_MIN, MIGRATION_NO_RAIN_COOLDOWN_MIN)),
+        post_rain_cooldown_min=int(cfg.get(CONF_POST_RAIN_COOLDOWN_MIN, MIGRATION_POST_RAIN_COOLDOWN_MIN)),
         update_interval_minutes=int(cfg.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
     )
 
@@ -74,53 +81,71 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """v1 → v2 マイグレーション。
+    """ConfigEntry のバージョン・マイグレーション。
 
-    v1 では use_ha_home / radius_pixels を使っていたため、v2 形式
-    (latitude/longitude/radius_meters/trigger_coverage) に書き換える。
+    - v1 → v2: use_ha_home / radius_pixels (旧) を
+               latitude/longitude/radius_meters (新) に変換。
+               trigger_coverage は any (旧挙動互換)。
+    - v2 → v3: no_rain_cooldown_min / post_rain_cooldown_min を 0 で補完
+               (既存ユーザーの挙動を壊さないため; 必要なら設定画面で上げる)。
     """
     _LOGGER.info("Migrating JMA Nowcast entry from v%s", entry.version)
 
-    if entry.version >= 2:
+    if entry.version >= 3:
         return True
 
-    # data と options を統合した辞書をベースに新スキーマを構築
     src = {**entry.data, **entry.options}
 
-    if src.get(CONF_USE_HA_HOME, True):
-        lat = hass.config.latitude  or 35.0
-        lon = hass.config.longitude or 135.0
-    else:
-        lat = src.get(CONF_LATITUDE,  hass.config.latitude  or 35.0)
-        lon = src.get(CONF_LONGITUDE, hass.config.longitude or 135.0)
+    # ── 緯度/経度/半径(m): v1 のみ変換が必要 ──
+    if entry.version == 1:
+        if src.get(CONF_USE_HA_HOME, True):
+            lat = hass.config.latitude  or 35.0
+            lon = hass.config.longitude or 135.0
+        else:
+            lat = src.get(CONF_LATITUDE,  hass.config.latitude  or 35.0)
+            lon = src.get(CONF_LONGITUDE, hass.config.longitude or 135.0)
 
-    # 旧 radius_pixels (zoom=10 のタイル px) → メートル概算
-    # 1 px ≒ (40,075,016 / 2^ZOOM / 256) * cos(lat) m
-    import math
-    meters_per_pixel = (
-        40_075_016.686 / (2 ** ZOOM) / 256 * math.cos(math.radians(lat))
-    )
-    old_px = int(src.get(CONF_RADIUS_PIXELS, 3))
-    new_meters = max(100, int(round(old_px * meters_per_pixel)))
+        # 旧 radius_pixels (zoom=10 のタイル px) → メートル概算
+        meters_per_pixel = (
+            40_075_016.686 / (2 ** ZOOM) / 256 * math.cos(math.radians(lat))
+        )
+        old_px = int(src.get(CONF_RADIUS_PIXELS, 3))
+        new_meters = max(100, int(round(old_px * meters_per_pixel)))
+
+        lat_lon_radius_coverage = {
+            CONF_LATITUDE:         float(lat),
+            CONF_LONGITUDE:        float(lon),
+            CONF_RADIUS_METERS:    new_meters,
+            CONF_TRIGGER_COVERAGE: DEFAULT_TRIGGER_COVERAGE,
+        }
+    else:
+        # v2 の場合は既にこれらは入っている
+        lat_lon_radius_coverage = {
+            CONF_LATITUDE:         float(src.get(CONF_LATITUDE,  hass.config.latitude  or 35.0)),
+            CONF_LONGITUDE:        float(src.get(CONF_LONGITUDE, hass.config.longitude or 135.0)),
+            CONF_RADIUS_METERS:    int(src.get(CONF_RADIUS_METERS, DEFAULT_RADIUS_METERS)),
+            CONF_TRIGGER_COVERAGE: str(src.get(CONF_TRIGGER_COVERAGE, DEFAULT_TRIGGER_COVERAGE)),
+        }
 
     new_data = {
-        CONF_LATITUDE:         float(lat),
-        CONF_LONGITUDE:        float(lon),
-        CONF_RADIUS_METERS:    new_meters,
-        CONF_FORECAST_MINUTES: list(src.get(CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES)),
-        CONF_THRESHOLD_MM:     float(src.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
-        CONF_TRIGGER_COVERAGE: DEFAULT_TRIGGER_COVERAGE,  # v1 は max 方式 = "any" と等価
-        CONF_SCAN_INTERVAL:    int(src.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+        **lat_lon_radius_coverage,
+        CONF_FORECAST_MINUTES:       list(src.get(CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES)),
+        CONF_THRESHOLD_MM:           float(src.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
+        # ── v3 新規: クールダウン (旧挙動を維持するため 0 で補完) ──
+        CONF_NO_RAIN_COOLDOWN_MIN:   int(src.get(
+            CONF_NO_RAIN_COOLDOWN_MIN,  MIGRATION_NO_RAIN_COOLDOWN_MIN
+        )),
+        CONF_POST_RAIN_COOLDOWN_MIN: int(src.get(
+            CONF_POST_RAIN_COOLDOWN_MIN, MIGRATION_POST_RAIN_COOLDOWN_MIN
+        )),
+        CONF_SCAN_INTERVAL:          int(src.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
     }
 
     hass.config_entries.async_update_entry(
         entry,
         data=new_data,
         options={},
-        version=2,
+        version=3,
     )
-    _LOGGER.info(
-        "JMA Nowcast entry migrated to v2 (radius %s px -> %s m)",
-        old_px, new_meters,
-    )
+    _LOGGER.info("JMA Nowcast entry migrated to v3")
     return True

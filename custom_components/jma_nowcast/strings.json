@@ -5,18 +5,22 @@
         "title": "JMA Nowcast セットアップ",
         "description": "気象庁 高解像度降水ナウキャストを設定します。\n地図のマーカーをドラッグして監視位置を、円の縁をドラッグして半径を調整できます。\n初期値は HA のホーム位置・半径 1 km です。",
         "data": {
-          "location":          "監視位置と半径",
-          "forecast_minutes":  "監視する分後",
-          "threshold_mm":      "発報閾値 (mm/h)",
-          "trigger_coverage":  "発報カバレッジ",
-          "scan_interval":     "更新間隔 (分)"
+          "location":                "監視位置と半径",
+          "forecast_minutes":        "監視する分後",
+          "threshold_mm":            "発報閾値 (mm/h)",
+          "trigger_coverage":        "発報カバレッジ",
+          "no_rain_cooldown_min":    "空振りクールダウン (分)",
+          "post_rain_cooldown_min":  "降雨後クールダウン (分)",
+          "scan_interval":           "更新間隔 (分)"
         },
         "data_description": {
-          "location":         "地図上のマーカー位置と円の半径を監視範囲として使用します",
-          "forecast_minutes": "チェックしたい時間帯を複数選択できます（最大60分先）",
-          "threshold_mm":     "この値以上の降水強度を「降水あり」と判定。1.0=小雨、5.0=中雨",
-          "trigger_coverage": "半径内のどれだけのエリアが閾値超えしたら発報するか",
-          "scan_interval":    "JMA ナウキャストの更新間隔は5分のため、5分推奨"
+          "location":               "地図上のマーカー位置と円の半径を監視範囲として使用します",
+          "forecast_minutes":       "チェックしたい時間帯を複数選択できます（最大60分先）",
+          "threshold_mm":           "この値以上の降水強度を「降水あり」と判定。1.0=小雨、5.0=中雨",
+          "trigger_coverage":       "半径内のどれだけのエリアが閾値超えしたら発報するか",
+          "no_rain_cooldown_min":   "発報したが実況で雨が観測されないまま経過した場合、この時間後に発報可能状態へ戻ります (0 = 旧挙動)",
+          "post_rain_cooldown_min": "実況で雨が止んでから次の発報を許可するまでの待ち時間 (0 = 旧挙動)",
+          "scan_interval":          "JMA ナウキャストの更新間隔は5分のため、5分推奨"
         }
       }
     },
@@ -28,33 +32,47 @@
     "step": {
       "init": {
         "title": "JMA Nowcast 設定",
-        "description": "監視位置・半径・発報条件を変更できます。「HA ホームにリセット」を ON にすると保存時に位置と半径を初期値に戻します。",
+        "description": "監視位置・半径・発報条件・クールダウンを変更できます。「HA ホームにリセット」を ON にすると保存時に位置と半径を初期値に戻します。",
         "data": {
-          "location":          "監視位置と半径",
-          "reset_to_home":     "HA ホームにリセット",
-          "forecast_minutes":  "監視する分後",
-          "threshold_mm":      "発報閾値 (mm/h)",
-          "trigger_coverage":  "発報カバレッジ",
-          "scan_interval":     "更新間隔 (分)"
+          "location":                "監視位置と半径",
+          "reset_to_home":           "HA ホームにリセット",
+          "forecast_minutes":        "監視する分後",
+          "threshold_mm":            "発報閾値 (mm/h)",
+          "trigger_coverage":        "発報カバレッジ",
+          "no_rain_cooldown_min":    "空振りクールダウン (分)",
+          "post_rain_cooldown_min":  "降雨後クールダウン (分)",
+          "scan_interval":           "更新間隔 (分)"
         },
         "data_description": {
-          "location":         "地図上のマーカー位置と円の半径を監視範囲として使用します",
-          "reset_to_home":    "ON のまま保存すると地図の値を破棄し HA のホーム位置と半径 1km に戻します",
-          "forecast_minutes": "チェックしたい時間帯を複数選択できます（最大60分先）",
-          "threshold_mm":     "この値以上の降水強度を「降水あり」と判定。1.0=小雨、5.0=中雨",
-          "trigger_coverage": "半径内のどれだけのエリアが閾値超えしたら発報するか",
-          "scan_interval":    "JMA ナウキャストの更新間隔は5分のため、5分推奨"
+          "location":               "地図上のマーカー位置と円の半径を監視範囲として使用します",
+          "reset_to_home":          "ON のまま保存すると地図の値を破棄し HA のホーム位置と半径 1km に戻します",
+          "forecast_minutes":       "チェックしたい時間帯を複数選択できます（最大60分先）",
+          "threshold_mm":           "この値以上の降水強度を「降水あり」と判定。1.0=小雨、5.0=中雨",
+          "trigger_coverage":       "半径内のどれだけのエリアが閾値超えしたら発報するか",
+          "no_rain_cooldown_min":   "発報したが実況で雨が観測されないまま経過した場合、この時間後に発報可能状態へ戻ります (0 = 即時に戻る)",
+          "post_rain_cooldown_min": "実況で雨が止んでから次の発報を許可するまでの待ち時間 (0 = 即時に戻る)",
+          "scan_interval":          "JMA ナウキャストの更新間隔は5分のため、5分推奨"
         }
       }
     }
   },
   "entity": {
     "binary_sensor": {
-      "rain_detected": { "name": "降水検出" }
+      "rain_detected": { "name": "降水アラート" },
+      "rain_observed": { "name": "降雨実況" }
     },
     "sensor": {
       "first_rain_minutes": { "name": "最初の降水まで" },
       "summary":            { "name": "予報サマリー" },
+      "alert_state": {
+        "name": "発報状態",
+        "state": {
+          "ready":          "発報可能",
+          "alerted":        "発報中 (実況待ち)",
+          "raining":        "降雨中",
+          "post_rain_wait": "降雨後クールダウン"
+        }
+      },
       "forecast_10min":     { "name": "10分後" },
       "forecast_20min":     { "name": "20分後" },
       "forecast_30min":     { "name": "30分後" },

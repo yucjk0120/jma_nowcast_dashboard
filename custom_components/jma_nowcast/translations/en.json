@@ -5,18 +5,22 @@
         "title": "JMA Nowcast Setup",
         "description": "Set up Japan Meteorological Agency High-Resolution Precipitation Nowcast.\nDrag the map marker to set the monitoring location and drag the circle edge to set the radius.\nDefaults to your HA home location with a 1 km radius.",
         "data": {
-          "location":          "Location and radius",
-          "forecast_minutes":  "Forecast minutes to monitor",
-          "threshold_mm":      "Alert threshold (mm/h)",
-          "trigger_coverage":  "Trigger coverage",
-          "scan_interval":     "Update interval (min)"
+          "location":                "Location and radius",
+          "forecast_minutes":        "Forecast minutes to monitor",
+          "threshold_mm":            "Alert threshold (mm/h)",
+          "trigger_coverage":        "Trigger coverage",
+          "no_rain_cooldown_min":    "No-rain cooldown (min)",
+          "post_rain_cooldown_min":  "Post-rain cooldown (min)",
+          "scan_interval":           "Update interval (min)"
         },
         "data_description": {
-          "location":         "Use the map marker as the monitoring point and the circle radius as the area",
-          "forecast_minutes": "Select one or more future time windows to check (up to 60 min ahead)",
-          "threshold_mm":     "Rainfall intensity at or above this value counts as rain. 1.0=light, 5.0=moderate",
-          "trigger_coverage": "How much of the area inside the radius must exceed the threshold to trigger",
-          "scan_interval":    "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
+          "location":               "Use the map marker as the monitoring point and the circle radius as the area",
+          "forecast_minutes":       "Select one or more future time windows to check (up to 60 min ahead)",
+          "threshold_mm":           "Rainfall intensity at or above this value counts as rain. 1.0=light, 5.0=moderate",
+          "trigger_coverage":       "How much of the area inside the radius must exceed the threshold to trigger",
+          "no_rain_cooldown_min":   "If an alert fires but no actual rain is observed, return to ready after this many minutes (0 = legacy behavior)",
+          "post_rain_cooldown_min": "Wait this many minutes after observed rain ends before the next alert is allowed (0 = legacy behavior)",
+          "scan_interval":          "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
         }
       }
     },
@@ -28,33 +32,47 @@
     "step": {
       "init": {
         "title": "JMA Nowcast Settings",
-        "description": "Adjust monitoring location, radius, and trigger conditions. Enable \"Reset to HA home\" to discard the current map values and revert to HA home with a 1 km radius on save.",
+        "description": "Adjust monitoring location, radius, trigger conditions, and cooldowns. Enable \"Reset to HA home\" to discard the current map values and revert to HA home with a 1 km radius on save.",
         "data": {
-          "location":          "Location and radius",
-          "reset_to_home":     "Reset to HA home",
-          "forecast_minutes":  "Forecast minutes to monitor",
-          "threshold_mm":      "Alert threshold (mm/h)",
-          "trigger_coverage":  "Trigger coverage",
-          "scan_interval":     "Update interval (min)"
+          "location":                "Location and radius",
+          "reset_to_home":           "Reset to HA home",
+          "forecast_minutes":        "Forecast minutes to monitor",
+          "threshold_mm":            "Alert threshold (mm/h)",
+          "trigger_coverage":        "Trigger coverage",
+          "no_rain_cooldown_min":    "No-rain cooldown (min)",
+          "post_rain_cooldown_min":  "Post-rain cooldown (min)",
+          "scan_interval":           "Update interval (min)"
         },
         "data_description": {
-          "location":         "Use the map marker as the monitoring point and the circle radius as the area",
-          "reset_to_home":    "If enabled when saving, ignores the map and reverts to HA home with a 1 km radius",
-          "forecast_minutes": "Select one or more future time windows to check (up to 60 min ahead)",
-          "threshold_mm":     "Rainfall intensity at or above this value counts as rain. 1.0=light, 5.0=moderate",
-          "trigger_coverage": "How much of the area inside the radius must exceed the threshold to trigger",
-          "scan_interval":    "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
+          "location":               "Use the map marker as the monitoring point and the circle radius as the area",
+          "reset_to_home":          "If enabled when saving, ignores the map and reverts to HA home with a 1 km radius",
+          "forecast_minutes":       "Select one or more future time windows to check (up to 60 min ahead)",
+          "threshold_mm":           "Rainfall intensity at or above this value counts as rain. 1.0=light, 5.0=moderate",
+          "trigger_coverage":       "How much of the area inside the radius must exceed the threshold to trigger",
+          "no_rain_cooldown_min":   "If an alert fires but no actual rain is observed, return to ready after this many minutes (0 = immediate)",
+          "post_rain_cooldown_min": "Wait this many minutes after observed rain ends before the next alert is allowed (0 = immediate)",
+          "scan_interval":          "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
         }
       }
     }
   },
   "entity": {
     "binary_sensor": {
-      "rain_detected": { "name": "Rain Detected" }
+      "rain_detected": { "name": "Rain Alert" },
+      "rain_observed": { "name": "Rain Observed" }
     },
     "sensor": {
       "first_rain_minutes": { "name": "First Rain In" },
       "summary":            { "name": "Forecast Summary" },
+      "alert_state": {
+        "name": "Alert State",
+        "state": {
+          "ready":          "Ready",
+          "alerted":        "Alerted (waiting for actual rain)",
+          "raining":        "Raining now",
+          "post_rain_wait": "Post-rain cooldown"
+        }
+      },
       "forecast_10min":     { "name": "In 10 minutes" },
       "forecast_20min":     { "name": "In 20 minutes" },
       "forecast_30min":     { "name": "In 30 minutes" },

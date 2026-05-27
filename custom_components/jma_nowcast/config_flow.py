@@ -26,17 +26,23 @@ from .const import (
     CONF_LATITUDE,
     CONF_LOCATION,
     CONF_LONGITUDE,
+    CONF_NO_RAIN_COOLDOWN_MIN,
+    CONF_POST_RAIN_COOLDOWN_MIN,
     CONF_RADIUS_METERS,
     CONF_RESET_TO_HOME,
     CONF_SCAN_INTERVAL,
     CONF_THRESHOLD_MM,
     CONF_TRIGGER_COVERAGE,
     DEFAULT_FORECAST_MINUTES,
+    DEFAULT_NO_RAIN_COOLDOWN_MIN,
+    DEFAULT_POST_RAIN_COOLDOWN_MIN,
     DEFAULT_RADIUS_METERS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_THRESHOLD_MM,
     DEFAULT_TRIGGER_COVERAGE,
     DOMAIN,
+    MAX_COOLDOWN_MIN,
+    MIN_COOLDOWN_MIN,
 )
 
 _MINUTE_OPTIONS = [str(m) for m in ALL_FORECAST_MINUTES]
@@ -48,6 +54,8 @@ def _build_form_schema(
     default_minutes: list[str],
     default_threshold: float,
     default_coverage: str,
+    default_no_rain_cooldown: int,
+    default_post_rain_cooldown: int,
     default_interval: int,
     include_reset: bool,
 ) -> vol.Schema:
@@ -75,6 +83,22 @@ def _build_form_schema(
                 translation_key="trigger_coverage",
             )
         ),
+        vol.Required(
+            CONF_NO_RAIN_COOLDOWN_MIN, default=default_no_rain_cooldown
+        ): NumberSelector(
+            NumberSelectorConfig(
+                min=MIN_COOLDOWN_MIN, max=MAX_COOLDOWN_MIN, step=5,
+                mode=NumberSelectorMode.SLIDER, unit_of_measurement="分",
+            )
+        ),
+        vol.Required(
+            CONF_POST_RAIN_COOLDOWN_MIN, default=default_post_rain_cooldown
+        ): NumberSelector(
+            NumberSelectorConfig(
+                min=MIN_COOLDOWN_MIN, max=MAX_COOLDOWN_MIN, step=5,
+                mode=NumberSelectorMode.SLIDER, unit_of_measurement="分",
+            )
+        ),
         vol.Required(CONF_SCAN_INTERVAL, default=default_interval): NumberSelector(
             NumberSelectorConfig(min=5, max=30, step=5, mode=NumberSelectorMode.SLIDER)
         ),
@@ -99,20 +123,22 @@ def _split_user_input(
     minutes = [int(m) for m in user_input.get(CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES)]
 
     return {
-        CONF_LATITUDE:         float(location["latitude"]),
-        CONF_LONGITUDE:        float(location["longitude"]),
-        CONF_RADIUS_METERS:    int(round(float(location.get("radius", DEFAULT_RADIUS_METERS)))),
-        CONF_FORECAST_MINUTES: minutes,
-        CONF_THRESHOLD_MM:     float(user_input.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
-        CONF_TRIGGER_COVERAGE: user_input.get(CONF_TRIGGER_COVERAGE, DEFAULT_TRIGGER_COVERAGE),
-        CONF_SCAN_INTERVAL:    int(user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+        CONF_LATITUDE:               float(location["latitude"]),
+        CONF_LONGITUDE:              float(location["longitude"]),
+        CONF_RADIUS_METERS:          int(round(float(location.get("radius", DEFAULT_RADIUS_METERS)))),
+        CONF_FORECAST_MINUTES:       minutes,
+        CONF_THRESHOLD_MM:           float(user_input.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
+        CONF_TRIGGER_COVERAGE:       user_input.get(CONF_TRIGGER_COVERAGE, DEFAULT_TRIGGER_COVERAGE),
+        CONF_NO_RAIN_COOLDOWN_MIN:   int(user_input.get(CONF_NO_RAIN_COOLDOWN_MIN, DEFAULT_NO_RAIN_COOLDOWN_MIN)),
+        CONF_POST_RAIN_COOLDOWN_MIN: int(user_input.get(CONF_POST_RAIN_COOLDOWN_MIN, DEFAULT_POST_RAIN_COOLDOWN_MIN)),
+        CONF_SCAN_INTERVAL:          int(user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
     }
 
 
 class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
     """JMA Nowcast 初期セットアップフロー。"""
 
-    VERSION = 2
+    VERSION = 3
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -131,6 +157,8 @@ class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
             default_minutes=[str(m) for m in DEFAULT_FORECAST_MINUTES],
             default_threshold=DEFAULT_THRESHOLD_MM,
             default_coverage=DEFAULT_TRIGGER_COVERAGE,
+            default_no_rain_cooldown=DEFAULT_NO_RAIN_COOLDOWN_MIN,
+            default_post_rain_cooldown=DEFAULT_POST_RAIN_COOLDOWN_MIN,
             default_interval=DEFAULT_SCAN_INTERVAL,
             include_reset=False,  # 初回はリセット不要（既にHAホームが初期値）
         )
@@ -182,6 +210,10 @@ class JmaNowcastOptionsFlow(OptionsFlow):
             default_minutes=default_minutes,
             default_threshold=float(current.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
             default_coverage=str(current.get(CONF_TRIGGER_COVERAGE, DEFAULT_TRIGGER_COVERAGE)),
+            default_no_rain_cooldown=int(current.get(
+                CONF_NO_RAIN_COOLDOWN_MIN, DEFAULT_NO_RAIN_COOLDOWN_MIN)),
+            default_post_rain_cooldown=int(current.get(
+                CONF_POST_RAIN_COOLDOWN_MIN, DEFAULT_POST_RAIN_COOLDOWN_MIN)),
             default_interval=int(current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
             include_reset=True,
         )

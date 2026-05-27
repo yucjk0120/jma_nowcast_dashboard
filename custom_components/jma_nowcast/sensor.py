@@ -6,7 +6,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import ALL_FORECAST_MINUTES, CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES, DOMAIN
+from .const import (
+    ALL_ALERT_STATES,
+    ALL_FORECAST_MINUTES,
+    DOMAIN,
+)
 from .coordinator import JmaNowcastCoordinator
 from .entity import JmaNowcastEntity
 
@@ -20,6 +24,7 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [
         JmaNowcastFirstRainSensor(coordinator, entry),
         JmaNowcastSummarySensor(coordinator, entry),
+        JmaNowcastAlertStateSensor(coordinator, entry),
     ]
     # 全分後センサーを生成（設定外は unavailable になる）
     for mins in ALL_FORECAST_MINUTES:
@@ -79,6 +84,41 @@ class JmaNowcastSummarySensor(JmaNowcastEntity, SensorEntity):
         return {
             "forecasts": self.coordinator.data.get("forecasts", {}),
             "checked_at": self.coordinator.data.get("checked_at"),
+        }
+
+
+class JmaNowcastAlertStateSensor(JmaNowcastEntity, SensorEntity):
+    """発報ステートマシンの現在状態を文字列で返すセンサー。
+
+    値: ready / alerted / raining / post_rain_wait
+    """
+
+    _attr_translation_key = "alert_state"
+    _attr_icon = "mdi:state-machine"
+    _attr_device_class = "enum"
+
+    def __init__(self, coordinator: JmaNowcastCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_alert_state"
+        self._attr_options = list(ALL_ALERT_STATES)
+
+    @property
+    def native_value(self) -> str | None:
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("alert_state")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        if not self.coordinator.data:
+            return {}
+        data = self.coordinator.data
+        return {
+            "alert":                  data.get("alert"),
+            "alert_state_since":      data.get("alert_state_since"),
+            "last_alert_at":          data.get("last_alert_at"),
+            "last_rain_observed_at":  data.get("last_rain_observed_at"),
+            "rain_ended_at":          data.get("rain_ended_at"),
         }
 
 
