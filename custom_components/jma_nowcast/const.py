@@ -22,15 +22,18 @@ ZOOM = 10
 ALL_FORECAST_MINUTES = [10, 20, 30, 60]
 
 # JMA Nowcast API
+# targetTimes_N2.json: 予報時刻リスト（basetime + 5〜60分先の validtime）
+# N1 は basetime==validtime（実況のみ）なので、本インテグレーションでは使用しない。
 JMA_TARGET_TIMES_URL = (
-    "https://www.jma.go.jp/bosai/nowc/data/nowcast/targetTimes_N1.json"
+    "https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N2.json"
 )
+# basetime と validtime の間の "none" は member パラメータ（アンサンブル無し）
 JMA_TILE_URL = (
-    "https://www.jma.go.jp/bosai/nowc/data/nowcast"
-    "/{basetime}/surf/hrpns/{validtime}/{z}/{x}/{y}.png"
+    "https://www.jma.go.jp/bosai/jmatile/data/nowc"
+    "/{basetime}/none/{validtime}/surf/hrpns/{z}/{x}/{y}.png"
 )
 
-# JMA HRPNS color palette (RGB → mm/h)
+# JMA HRPNS color palette (RGB → mm/h) — 2026-05 実タイルから検証済み
 JMA_PALETTE: list[tuple[tuple[int, int, int], float]] = [
     ((255, 255, 255),  0.0),
     ((242, 242, 255),  0.0),
@@ -39,8 +42,8 @@ JMA_PALETTE: list[tuple[tuple[int, int, int], float]] = [
     ((  0,  65, 255),  5.0),
     ((  0, 200,  50), 10.0),
     ((  0, 130,  30), 20.0),
-    ((255, 245,   0), 30.0),
+    ((250, 245,   0), 30.0),
     ((255, 153,   0), 50.0),
-    ((255,   0,   0), 80.0),
+    ((255,  40,   0), 80.0),
     ((180,   0, 104), 99.9),
 ]

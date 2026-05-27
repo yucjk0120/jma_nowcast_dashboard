@@ -51,7 +51,11 @@
     },
     "sensor": {
       "first_rain_minutes": { "name": "First Rain In" },
-      "summary":            { "name": "Forecast Summary" }
+      "summary":            { "name": "Forecast Summary" },
+      "forecast_10min":     { "name": "In 10 minutes" },
+      "forecast_20min":     { "name": "In 20 minutes" },
+      "forecast_30min":     { "name": "In 30 minutes" },
+      "forecast_60min":     { "name": "In 60 minutes" }
     },
     "button": {
       "refresh": { "name": "Check Now" }

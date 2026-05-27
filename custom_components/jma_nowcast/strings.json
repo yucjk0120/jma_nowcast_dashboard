@@ -51,7 +51,11 @@
     },
     "sensor": {
       "first_rain_minutes": { "name": "最初の降水まで" },
-      "summary":            { "name": "予報サマリー" }
+      "summary":            { "name": "予報サマリー" },
+      "forecast_10min":     { "name": "10分後" },
+      "forecast_20min":     { "name": "20分後" },
+      "forecast_30min":     { "name": "30分後" },
+      "forecast_60min":     { "name": "60分後" }
     },
     "button": {
       "refresh": { "name": "今すぐ確認" }

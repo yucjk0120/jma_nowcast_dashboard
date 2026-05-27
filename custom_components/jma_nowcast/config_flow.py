@@ -71,10 +71,10 @@ class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(CONF_USE_HA_HOME, default=True): BooleanSelector(),
                 vol.Optional(CONF_LATITUDE,  default=ha_lat): NumberSelector(
-                    NumberSelectorConfig(min=24, max=46, step=0.0001, mode=NumberSelectorMode.BOX)
+                    NumberSelectorConfig(min=24, max=46, step=0.001, mode=NumberSelectorMode.BOX)
                 ),
                 vol.Optional(CONF_LONGITUDE, default=ha_lon): NumberSelector(
-                    NumberSelectorConfig(min=122, max=154, step=0.0001, mode=NumberSelectorMode.BOX)
+                    NumberSelectorConfig(min=122, max=154, step=0.001, mode=NumberSelectorMode.BOX)
                 ),
             }),
         )
@@ -119,10 +119,10 @@ class JmaNowcastOptionsFlow(OptionsFlow):
                     default=current.get(CONF_USE_HA_HOME, DEFAULT_USE_HA_HOME),
                 ): BooleanSelector(),
                 vol.Optional(CONF_LATITUDE,  default=ha_lat): NumberSelector(
-                    NumberSelectorConfig(min=24, max=46, step=0.0001, mode=NumberSelectorMode.BOX)
+                    NumberSelectorConfig(min=24, max=46, step=0.001, mode=NumberSelectorMode.BOX)
                 ),
                 vol.Optional(CONF_LONGITUDE, default=ha_lon): NumberSelector(
-                    NumberSelectorConfig(min=122, max=154, step=0.0001, mode=NumberSelectorMode.BOX)
+                    NumberSelectorConfig(min=122, max=154, step=0.001, mode=NumberSelectorMode.BOX)
                 ),
                 # ── 監視する分後（文字列リストで渡す） ──────────────────────
                 vol.Required(
