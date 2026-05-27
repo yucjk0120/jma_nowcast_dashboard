@@ -93,8 +93,9 @@ GSI_MAX_ZOOM = 18
 # 各カメラエンティティで「監視範囲の円が画像幅の 1/R になる」R の一覧。
 # R が大きいほど広域 (ズームアウト) になる。
 TILE_CAMERA_SCALES: list[int] = [4, 8, 16, 32]
-# 出力 PNG の一辺 (px)
-TILE_CAMERA_OUTPUT_PX = 3000
+# 出力 PNG の一辺 (px)。2048 = 2^11 で 4/8/16/32 全てで割り切れ、
+# 半径円の画素数が小数にならない。
+TILE_CAMERA_OUTPUT_PX = 2048
 # JMA オーバーレイ画像の不透明度 (0=透明 / 255=不透明)。
 # 既定 160 ≒ 63% でベースマップの地物と雨雲の両方が読める。
 TILE_CAMERA_OVERLAY_ALPHA = 160
