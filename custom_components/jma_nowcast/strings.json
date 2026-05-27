@@ -3,16 +3,20 @@
     "step": {
       "user": {
         "title": "JMA Nowcast セットアップ",
-        "description": "気象庁 高解像度降水ナウキャストを設定します。\n監視する分後・閾値などの詳細設定はセットアップ後に「設定」から変更できます。",
+        "description": "気象庁 高解像度降水ナウキャストを設定します。\n地図のマーカーをドラッグして監視位置を、円の縁をドラッグして半径を調整できます。\n初期値は HA のホーム位置・半径 1 km です。",
         "data": {
-          "use_ha_home": "HA ホーム位置を使用",
-          "latitude": "緯度（カスタム位置）",
-          "longitude": "経度（カスタム位置）"
+          "location":          "監視位置と半径",
+          "forecast_minutes":  "監視する分後",
+          "threshold_mm":      "発報閾値 (mm/h)",
+          "trigger_coverage":  "発報カバレッジ",
+          "scan_interval":     "更新間隔 (分)"
         },
         "data_description": {
-          "use_ha_home": "ON にすると HA の設定 > ホームゾーンの座標を自動的に使用します",
-          "latitude": "「HA ホーム位置を使用」がOFFの場合に使用します",
-          "longitude": "「HA ホーム位置を使用」がOFFの場合に使用します"
+          "location":         "地図上のマーカー位置と円の半径を監視範囲として使用します",
+          "forecast_minutes": "チェックしたい時間帯を複数選択できます（最大60分先）",
+          "threshold_mm":     "この値以上の降水強度を「降水あり」と判定。1.0=小雨、5.0=中雨",
+          "trigger_coverage": "半径内のどれだけのエリアが閾値超えしたら発報するか",
+          "scan_interval":    "JMA ナウキャストの更新間隔は5分のため、5分推奨"
         }
       }
     },
@@ -24,23 +28,22 @@
     "step": {
       "init": {
         "title": "JMA Nowcast 設定",
+        "description": "監視位置・半径・発報条件を変更できます。「HA ホームにリセット」を ON にすると保存時に位置と半径を初期値に戻します。",
         "data": {
-          "use_ha_home": "HA ホーム位置を使用",
-          "latitude": "緯度（カスタム位置）",
-          "longitude": "経度（カスタム位置）",
-          "forecast_minutes": "監視する分後",
-          "threshold_mm": "発報閾値 (mm/h)",
-          "radius_pixels": "チェック半径 (px)",
-          "scan_interval": "更新間隔 (分)"
+          "location":          "監視位置と半径",
+          "reset_to_home":     "HA ホームにリセット",
+          "forecast_minutes":  "監視する分後",
+          "threshold_mm":      "発報閾値 (mm/h)",
+          "trigger_coverage":  "発報カバレッジ",
+          "scan_interval":     "更新間隔 (分)"
         },
         "data_description": {
-          "use_ha_home": "ON にすると HA の設定 > ホームゾーンの座標を自動的に使用します",
-          "latitude": "「HA ホーム位置を使用」がOFFの場合に使用します",
-          "longitude": "「HA ホーム位置を使用」がOFFの場合に使用します",
+          "location":         "地図上のマーカー位置と円の半径を監視範囲として使用します",
+          "reset_to_home":    "ON のまま保存すると地図の値を破棄し HA のホーム位置と半径 1km に戻します",
           "forecast_minutes": "チェックしたい時間帯を複数選択できます（最大60分先）",
-          "threshold_mm": "この値以上の降水強度でアラート。1.0=小雨、5.0=中雨",
-          "radius_pixels": "監視地点の周囲何ピクセルをチェックするか。3px ≒ 半径3km（zoom=10）",
-          "scan_interval": "JMA ナウキャストの更新間隔は5分のため、5分推奨"
+          "threshold_mm":     "この値以上の降水強度を「降水あり」と判定。1.0=小雨、5.0=中雨",
+          "trigger_coverage": "半径内のどれだけのエリアが閾値超えしたら発報するか",
+          "scan_interval":    "JMA ナウキャストの更新間隔は5分のため、5分推奨"
         }
       }
     }
@@ -68,6 +71,15 @@
         "20": "20分後",
         "30": "30分後",
         "60": "60分後"
+      }
+    },
+    "trigger_coverage": {
+      "options": {
+        "any":           "1ピクセルでも (最も敏感)",
+        "quarter":       "範囲の25%以上",
+        "half":          "範囲の50%以上",
+        "three_quarter": "範囲の75%以上",
+        "all":           "範囲の100% (全域)"
       }
     }
   }

@@ -14,6 +14,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    COVERAGE_ANY,
+    COVERAGE_RATIOS,
+    DEFAULT_TRIGGER_COVERAGE,
     DOMAIN,
     JMA_PALETTE,
     JMA_TARGET_TIMES_URL,
@@ -23,6 +26,9 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
+
+# 地球の赤道周長 (m)。Web Mercator のピクセル解像度計算に使う。
+_EARTH_CIRCUMFERENCE_M = 40_075_016.686
 
 
 # ── 座標変換 ───────────────────────────────────────────────────────────────
@@ -42,6 +48,11 @@ def lat_lon_to_tile_pixel(
     px = int((x_f - tx) * 256)
     py = int((y_f - ty) * 256)
     return tx, ty, px, py
+
+
+def meters_per_pixel(lat: float, zoom: int) -> float:
+    """Web Mercator 上での 1 ピクセルあたりのメートル (緯度依存)。"""
+    return _EARTH_CIRCUMFERENCE_M / (2 ** zoom) / 256 * math.cos(math.radians(lat))
 
 
 # ── カラー → 降水強度 ───────────────────────────────────────────────────────
@@ -78,23 +89,53 @@ def _sync_check_tile(
     img_bytes: bytes,
     px: int,
     py: int,
-    radius: int,
+    radius_px: int,
     threshold_mm: float,
-) -> tuple[bool, float]:
-    """タイル画像を解析して降水強度を返す（ブロッキング処理）。"""
+    coverage_ratio: float,
+    coverage_preset: str,
+) -> tuple[bool, float, float]:
+    """タイル画像を解析。
+
+    戻り値:
+        (triggered, max_mm, coverage_ratio_observed)
+
+    - triggered: 指定カバレッジ条件を満たすか
+    - max_mm: 半径内の最大降水強度（センサ値に表示）
+    - coverage_ratio_observed: 半径内ピクセルのうち閾値超えだった割合
+    """
     img = Image.open(BytesIO(img_bytes)).convert("RGBA")
     pixels = img.load()
     w, h = img.size
+
     max_mm = 0.0
-    for dy in range(-radius, radius + 1):
-        for dx in range(-radius, radius + 1):
+    wet = 0
+    total = 0
+
+    for dy in range(-radius_px, radius_px + 1):
+        for dx in range(-radius_px, radius_px + 1):
             ppx, ppy = px + dx, py + dy
             if 0 <= ppx < w and 0 <= ppy < h:
                 red, grn, blu, alpha = pixels[ppx, ppy]
                 if alpha < 50:
                     continue  # 透明 = データなし
-                max_mm = max(max_mm, rgb_to_intensity(red, grn, blu))
-    return max_mm >= threshold_mm, round(max_mm, 1)
+                total += 1
+                mm = rgb_to_intensity(red, grn, blu)
+                if mm > max_mm:
+                    max_mm = mm
+                if mm >= threshold_mm:
+                    wet += 1
+
+    if total == 0:
+        return False, 0.0, 0.0
+
+    ratio = wet / total
+
+    if coverage_preset == COVERAGE_ANY:
+        triggered = wet > 0
+    else:
+        triggered = ratio >= coverage_ratio
+
+    return triggered, round(max_mm, 1), round(ratio, 3)
 
 
 # ── コーディネーター ───────────────────────────────────────────────────────
@@ -109,17 +150,29 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         lon: float,
         forecast_minutes: list[int],
         threshold_mm: float,
-        radius_pixels: int,
+        radius_meters: int,
+        trigger_coverage: str = DEFAULT_TRIGGER_COVERAGE,
         update_interval_minutes: int = 5,
     ) -> None:
         self.lat = lat
         self.lon = lon
         self.forecast_minutes = forecast_minutes
         self.threshold_mm = threshold_mm
-        self.radius_pixels = radius_pixels
+        self.radius_meters = radius_meters
+        self.trigger_coverage = trigger_coverage
 
         self._tile_x, self._tile_y, self._px, self._py = lat_lon_to_tile_pixel(
             lat, lon, ZOOM
+        )
+        # ZOOM=10 の 1px は緯度 35° で約 125m
+        m_per_px = meters_per_pixel(lat, ZOOM)
+        self._radius_pixels = max(1, int(round(radius_meters / m_per_px)))
+        self._coverage_ratio = COVERAGE_RATIOS.get(trigger_coverage, 0.0)
+
+        _LOGGER.debug(
+            "Coordinator init: tile=%s/%s/%s px=%s,%s radius=%sm (%spx) coverage=%s",
+            ZOOM, self._tile_x, self._tile_y, self._px, self._py,
+            radius_meters, self._radius_pixels, trigger_coverage,
         )
 
         super().__init__(
@@ -146,8 +199,11 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "location": {
                         "lat": round(self.lat, 4),
                         "lon": round(self.lon, 4),
+                        "radius_m": self.radius_meters,
+                        "radius_px": self._radius_pixels,
                         "tile": f"{ZOOM}/{self._tile_x}/{self._tile_y}",
                     },
+                    "coverage": self.trigger_coverage,
                     "forecasts": {},
                 }
 
@@ -156,7 +212,8 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     entry = _find_best_entry(now + timedelta(minutes=mins), entries)
                     if entry is None:
                         result["forecasts"][mins] = {
-                            "rain": False, "mm": 0.0, "error": "no_data"
+                            "rain": False, "mm": 0.0, "coverage": 0.0,
+                            "error": "no_data",
                         }
                         continue
 
@@ -174,23 +231,27 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     except aiohttp.ClientError as exc:
                         _LOGGER.warning("Tile fetch failed (%s min): %s", mins, exc)
                         result["forecasts"][mins] = {
-                            "rain": False, "mm": 0.0, "error": str(exc)
+                            "rain": False, "mm": 0.0, "coverage": 0.0,
+                            "error": str(exc),
                         }
                         continue
 
                     # PIL 解析は Executor で実行（ブロッキング回避）
-                    has_rain, intensity = await self.hass.async_add_executor_job(
+                    has_rain, intensity, coverage_ratio = await self.hass.async_add_executor_job(
                         _sync_check_tile,
                         img_bytes,
                         self._px, self._py,
-                        self.radius_pixels,
+                        self._radius_pixels,
                         self.threshold_mm,
+                        self._coverage_ratio,
+                        self.trigger_coverage,
                     )
 
                     vt_dt = _parse_jma_dt(validtime)
                     result["forecasts"][mins] = {
-                        "rain": has_rain,
-                        "mm": intensity,
+                        "rain":          has_rain,
+                        "mm":            intensity,
+                        "coverage":      coverage_ratio,
                         "forecast_time": vt_dt.strftime("%H:%M"),
                     }
 

@@ -10,6 +10,8 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    LocationSelector,
+    LocationSelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -18,30 +20,99 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    ALL_COVERAGE_OPTIONS,
     ALL_FORECAST_MINUTES,
     CONF_FORECAST_MINUTES,
     CONF_LATITUDE,
+    CONF_LOCATION,
     CONF_LONGITUDE,
-    CONF_RADIUS_PIXELS,
+    CONF_RADIUS_METERS,
+    CONF_RESET_TO_HOME,
     CONF_SCAN_INTERVAL,
     CONF_THRESHOLD_MM,
-    CONF_USE_HA_HOME,
+    CONF_TRIGGER_COVERAGE,
     DEFAULT_FORECAST_MINUTES,
-    DEFAULT_RADIUS_PIXELS,
+    DEFAULT_RADIUS_METERS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_THRESHOLD_MM,
-    DEFAULT_USE_HA_HOME,
+    DEFAULT_TRIGGER_COVERAGE,
     DOMAIN,
 )
 
-# SelectSelector に渡すオプション（文字列リスト — 最も互換性が高い）
 _MINUTE_OPTIONS = [str(m) for m in ALL_FORECAST_MINUTES]
+
+
+def _build_form_schema(
+    *,
+    default_location: dict[str, float],
+    default_minutes: list[str],
+    default_threshold: float,
+    default_coverage: str,
+    default_interval: int,
+    include_reset: bool,
+) -> vol.Schema:
+    """ConfigFlow / OptionsFlow 共通のスキーマを組み立てる。"""
+    fields: dict = {
+        vol.Required(CONF_LOCATION, default=default_location): LocationSelector(
+            LocationSelectorConfig(radius=True)
+        ),
+    }
+    if include_reset:
+        fields[
+            vol.Optional(CONF_RESET_TO_HOME, default=False)
+        ] = BooleanSelector()
+
+    fields.update({
+        vol.Required(CONF_FORECAST_MINUTES, default=default_minutes): SelectSelector(
+            SelectSelectorConfig(options=_MINUTE_OPTIONS, multiple=True)
+        ),
+        vol.Required(CONF_THRESHOLD_MM, default=default_threshold): NumberSelector(
+            NumberSelectorConfig(min=0.5, max=30.0, step=0.5, mode=NumberSelectorMode.SLIDER)
+        ),
+        vol.Required(CONF_TRIGGER_COVERAGE, default=default_coverage): SelectSelector(
+            SelectSelectorConfig(
+                options=ALL_COVERAGE_OPTIONS,
+                translation_key="trigger_coverage",
+            )
+        ),
+        vol.Required(CONF_SCAN_INTERVAL, default=default_interval): NumberSelector(
+            NumberSelectorConfig(min=5, max=30, step=5, mode=NumberSelectorMode.SLIDER)
+        ),
+    })
+    return vol.Schema(fields)
+
+
+def _split_user_input(
+    user_input: dict[str, Any],
+    *,
+    fallback_location: dict[str, float],
+) -> dict[str, Any]:
+    """フォーム入力 → 保存用 dict に変換。
+
+    LocationSelector の返却 dict を lat/lon/radius_meters に分解する。
+    reset_to_home が True なら fallback_location で上書き。
+    """
+    location = dict(user_input.get(CONF_LOCATION, fallback_location))
+    if user_input.get(CONF_RESET_TO_HOME):
+        location = dict(fallback_location)
+
+    minutes = [int(m) for m in user_input.get(CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES)]
+
+    return {
+        CONF_LATITUDE:         float(location["latitude"]),
+        CONF_LONGITUDE:        float(location["longitude"]),
+        CONF_RADIUS_METERS:    int(round(float(location.get("radius", DEFAULT_RADIUS_METERS)))),
+        CONF_FORECAST_MINUTES: minutes,
+        CONF_THRESHOLD_MM:     float(user_input.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
+        CONF_TRIGGER_COVERAGE: user_input.get(CONF_TRIGGER_COVERAGE, DEFAULT_TRIGGER_COVERAGE),
+        CONF_SCAN_INTERVAL:    int(user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+    }
 
 
 class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
     """JMA Nowcast 初期セットアップフロー。"""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -49,35 +120,28 @@ class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 
+        ha_location = self._ha_home_location()
+
         if user_input is not None:
-            return self.async_create_entry(
-                title="JMA Nowcast",
-                data={
-                    CONF_USE_HA_HOME:      user_input.get(CONF_USE_HA_HOME, DEFAULT_USE_HA_HOME),
-                    CONF_LATITUDE:         float(user_input.get(CONF_LATITUDE, self.hass.config.latitude or 35.0)),
-                    CONF_LONGITUDE:        float(user_input.get(CONF_LONGITUDE, self.hass.config.longitude or 135.0)),
-                    CONF_FORECAST_MINUTES: DEFAULT_FORECAST_MINUTES,
-                    CONF_THRESHOLD_MM:     DEFAULT_THRESHOLD_MM,
-                    CONF_RADIUS_PIXELS:    DEFAULT_RADIUS_PIXELS,
-                    CONF_SCAN_INTERVAL:    DEFAULT_SCAN_INTERVAL,
-                },
-            )
+            stored = _split_user_input(user_input, fallback_location=ha_location)
+            return self.async_create_entry(title="JMA Nowcast", data=stored)
 
-        ha_lat = round(self.hass.config.latitude or 35.0, 4)
-        ha_lon = round(self.hass.config.longitude or 135.0, 4)
-
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema({
-                vol.Required(CONF_USE_HA_HOME, default=True): BooleanSelector(),
-                vol.Optional(CONF_LATITUDE,  default=ha_lat): NumberSelector(
-                    NumberSelectorConfig(min=24, max=46, step=0.001, mode=NumberSelectorMode.BOX)
-                ),
-                vol.Optional(CONF_LONGITUDE, default=ha_lon): NumberSelector(
-                    NumberSelectorConfig(min=122, max=154, step=0.001, mode=NumberSelectorMode.BOX)
-                ),
-            }),
+        schema = _build_form_schema(
+            default_location=ha_location,
+            default_minutes=[str(m) for m in DEFAULT_FORECAST_MINUTES],
+            default_threshold=DEFAULT_THRESHOLD_MM,
+            default_coverage=DEFAULT_TRIGGER_COVERAGE,
+            default_interval=DEFAULT_SCAN_INTERVAL,
+            include_reset=False,  # 初回はリセット不要（既にHAホームが初期値）
         )
+        return self.async_show_form(step_id="user", data_schema=schema)
+
+    def _ha_home_location(self) -> dict[str, float]:
+        return {
+            "latitude":  float(self.hass.config.latitude or 35.0),
+            "longitude": float(self.hass.config.longitude or 135.0),
+            "radius":    float(DEFAULT_RADIUS_METERS),
+        }
 
     @staticmethod
     @callback
@@ -94,63 +158,31 @@ class JmaNowcastOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        # data と options を統合して現在値を取得（options が優先）
         current = {**self._config_entry.data, **self._config_entry.options}
+        ha_location = {
+            "latitude":  float(self.hass.config.latitude or 35.0),
+            "longitude": float(self.hass.config.longitude or 135.0),
+            "radius":    float(DEFAULT_RADIUS_METERS),
+        }
 
         if user_input is not None:
-            mins = [int(m) for m in user_input.get(CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES)]
-            return self.async_create_entry(
-                title="",
-                data={**user_input, CONF_FORECAST_MINUTES: mins},
-            )
+            stored = _split_user_input(user_input, fallback_location=ha_location)
+            return self.async_create_entry(title="", data=stored)
 
-        current_mins = [
+        default_location = {
+            "latitude":  float(current.get(CONF_LATITUDE,  ha_location["latitude"])),
+            "longitude": float(current.get(CONF_LONGITUDE, ha_location["longitude"])),
+            "radius":    float(current.get(CONF_RADIUS_METERS, DEFAULT_RADIUS_METERS)),
+        }
+        default_minutes = [
             str(m) for m in current.get(CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES)
         ]
-        ha_lat = round(current.get(CONF_LATITUDE, self.hass.config.latitude or 35.0), 4)
-        ha_lon = round(current.get(CONF_LONGITUDE, self.hass.config.longitude or 135.0), 4)
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({
-                # ── 位置 ──────────────────────────────────────────────────
-                vol.Required(
-                    CONF_USE_HA_HOME,
-                    default=current.get(CONF_USE_HA_HOME, DEFAULT_USE_HA_HOME),
-                ): BooleanSelector(),
-                vol.Optional(CONF_LATITUDE,  default=ha_lat): NumberSelector(
-                    NumberSelectorConfig(min=24, max=46, step=0.001, mode=NumberSelectorMode.BOX)
-                ),
-                vol.Optional(CONF_LONGITUDE, default=ha_lon): NumberSelector(
-                    NumberSelectorConfig(min=122, max=154, step=0.001, mode=NumberSelectorMode.BOX)
-                ),
-                # ── 監視する分後（文字列リストで渡す） ──────────────────────
-                vol.Required(
-                    CONF_FORECAST_MINUTES,
-                    default=current_mins,
-                ): SelectSelector(
-                    SelectSelectorConfig(options=_MINUTE_OPTIONS, multiple=True)
-                ),
-                # ── 閾値 ────────────────────────────────────────────────────
-                vol.Required(
-                    CONF_THRESHOLD_MM,
-                    default=float(current.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=0.5, max=30.0, step=0.5, mode=NumberSelectorMode.SLIDER)
-                ),
-                # ── チェック半径 ─────────────────────────────────────────────
-                vol.Required(
-                    CONF_RADIUS_PIXELS,
-                    default=int(current.get(CONF_RADIUS_PIXELS, DEFAULT_RADIUS_PIXELS)),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=1, max=10, step=1, mode=NumberSelectorMode.SLIDER)
-                ),
-                # ── 更新間隔 ────────────────────────────────────────────────
-                vol.Required(
-                    CONF_SCAN_INTERVAL,
-                    default=int(current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
-                ): NumberSelector(
-                    NumberSelectorConfig(min=5, max=30, step=5, mode=NumberSelectorMode.SLIDER)
-                ),
-            }),
+        schema = _build_form_schema(
+            default_location=default_location,
+            default_minutes=default_minutes,
+            default_threshold=float(current.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
+            default_coverage=str(current.get(CONF_TRIGGER_COVERAGE, DEFAULT_TRIGGER_COVERAGE)),
+            default_interval=int(current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+            include_reset=True,
         )
+        return self.async_show_form(step_id="init", data_schema=schema)

@@ -3,16 +3,20 @@
     "step": {
       "user": {
         "title": "JMA Nowcast Setup",
-        "description": "Set up Japan Meteorological Agency High-Resolution Precipitation Nowcast.\nDetailed settings (forecast minutes, threshold, etc.) can be changed via Configure after setup.",
+        "description": "Set up Japan Meteorological Agency High-Resolution Precipitation Nowcast.\nDrag the map marker to set the monitoring location and drag the circle edge to set the radius.\nDefaults to your HA home location with a 1 km radius.",
         "data": {
-          "use_ha_home": "Use HA Home location",
-          "latitude": "Latitude (custom location)",
-          "longitude": "Longitude (custom location)"
+          "location":          "Location and radius",
+          "forecast_minutes":  "Forecast minutes to monitor",
+          "threshold_mm":      "Alert threshold (mm/h)",
+          "trigger_coverage":  "Trigger coverage",
+          "scan_interval":     "Update interval (min)"
         },
         "data_description": {
-          "use_ha_home": "When ON, automatically uses coordinates from HA Settings > Home Zone",
-          "latitude": "Used when 'Use HA Home location' is OFF",
-          "longitude": "Used when 'Use HA Home location' is OFF"
+          "location":         "Use the map marker as the monitoring point and the circle radius as the area",
+          "forecast_minutes": "Select one or more future time windows to check (up to 60 min ahead)",
+          "threshold_mm":     "Rainfall intensity at or above this value counts as rain. 1.0=light, 5.0=moderate",
+          "trigger_coverage": "How much of the area inside the radius must exceed the threshold to trigger",
+          "scan_interval":    "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
         }
       }
     },
@@ -24,23 +28,22 @@
     "step": {
       "init": {
         "title": "JMA Nowcast Settings",
+        "description": "Adjust monitoring location, radius, and trigger conditions. Enable \"Reset to HA home\" to discard the current map values and revert to HA home with a 1 km radius on save.",
         "data": {
-          "use_ha_home": "Use HA Home location",
-          "latitude": "Latitude (custom location)",
-          "longitude": "Longitude (custom location)",
-          "forecast_minutes": "Forecast minutes to monitor",
-          "threshold_mm": "Alert threshold (mm/h)",
-          "radius_pixels": "Check radius (px)",
-          "scan_interval": "Update interval (min)"
+          "location":          "Location and radius",
+          "reset_to_home":     "Reset to HA home",
+          "forecast_minutes":  "Forecast minutes to monitor",
+          "threshold_mm":      "Alert threshold (mm/h)",
+          "trigger_coverage":  "Trigger coverage",
+          "scan_interval":     "Update interval (min)"
         },
         "data_description": {
-          "use_ha_home": "When ON, automatically uses coordinates from HA Settings > Home Zone",
-          "latitude": "Used when 'Use HA Home location' is OFF",
-          "longitude": "Used when 'Use HA Home location' is OFF",
+          "location":         "Use the map marker as the monitoring point and the circle radius as the area",
+          "reset_to_home":    "If enabled when saving, ignores the map and reverts to HA home with a 1 km radius",
           "forecast_minutes": "Select one or more future time windows to check (up to 60 min ahead)",
-          "threshold_mm": "Rainfall intensity threshold for alert. 1.0=light rain, 5.0=moderate rain",
-          "radius_pixels": "Pixels around location to check. 3px ≈ 3km radius at zoom=10",
-          "scan_interval": "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
+          "threshold_mm":     "Rainfall intensity at or above this value counts as rain. 1.0=light, 5.0=moderate",
+          "trigger_coverage": "How much of the area inside the radius must exceed the threshold to trigger",
+          "scan_interval":    "JMA Nowcast updates every 5 minutes, so 5 min is recommended"
         }
       }
     }
@@ -68,6 +71,15 @@
         "20": "20 minutes",
         "30": "30 minutes",
         "60": "60 minutes"
+      }
+    },
+    "trigger_coverage": {
+      "options": {
+        "any":           "At least 1 pixel (most sensitive)",
+        "quarter":       "At least 25% of area",
+        "half":          "At least 50% of area",
+        "three_quarter": "At least 75% of area",
+        "all":           "100% of area (entire radius)"
       }
     }
   }
