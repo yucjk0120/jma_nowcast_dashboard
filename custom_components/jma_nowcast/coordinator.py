@@ -183,8 +183,11 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_rain_observed_at: datetime | None = None
 
         # ── 最新観測タイル (camera エンティティが参照) ──
-        self.latest_observation_image: bytes | None = None
-        self.latest_observation_at:    datetime | None = None
+        self.latest_observation_image:     bytes | None = None
+        self.latest_observation_at:        datetime | None = None
+        # 監視範囲タイル camera 用: 同じ basetime/validtime で広域タイルを再取得する
+        self.latest_observation_basetime:  str | None = None
+        self.latest_observation_validtime: str | None = None
 
         _LOGGER.debug(
             "Coordinator init: tile=%s/%s/%s px=%s,%s radius=%sm (%spx) coverage=%s cooldowns=%s/%s min",
@@ -338,8 +341,10 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     obs_validtime = obs_entry.get("validtime", obs_basetime)
                     img_bytes = await self._fetch_tile_bytes(session, obs_basetime, obs_validtime)
                     if img_bytes is not None:
-                        self.latest_observation_image = img_bytes
-                        self.latest_observation_at = _parse_jma_dt(obs_validtime)
+                        self.latest_observation_image     = img_bytes
+                        self.latest_observation_at        = _parse_jma_dt(obs_validtime)
+                        self.latest_observation_basetime  = obs_basetime
+                        self.latest_observation_validtime = obs_validtime
                         obs_triggered, obs_mm, obs_cov = await self._analyze_tile(img_bytes)
                         result["rain_observed"]     = obs_triggered
                         result["observed_mm"]       = obs_mm

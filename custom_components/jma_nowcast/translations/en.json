@@ -82,7 +82,10 @@
       "refresh": { "name": "Check Now" }
     },
     "camera": {
-      "tile": { "name": "Monitoring Tile" }
+      "tile_x4":  { "name": "Monitoring Tile ×4 (circle = 1/4 width)" },
+      "tile_x8":  { "name": "Monitoring Tile ×8 (circle = 1/8 width)" },
+      "tile_x16": { "name": "Monitoring Tile ×16 (circle = 1/16 width)" },
+      "tile_x32": { "name": "Monitoring Tile ×32 (circle = 1/32 width)" }
     }
   },
   "selector": {

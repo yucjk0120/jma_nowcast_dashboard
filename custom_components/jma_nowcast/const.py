@@ -83,6 +83,22 @@ COVERAGE_RATIOS = {
     COVERAGE_ALL:           1.00,
 }
 
+# ── Base map (GSI / 国土地理院) ──────────────────────────────────────────
+# 監視範囲タイル camera で JMA オーバーレイの下に敷くベースマップ。
+# 利用規約: https://maps.gsi.go.jp/development/ichiran.html (出典明記必要)
+GSI_PALE_TILE_URL = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png"
+GSI_MAX_ZOOM = 18
+
+# ── 監視範囲タイル camera ────────────────────────────────────────────────
+# 各カメラエンティティで「監視範囲の円が画像幅の 1/R になる」R の一覧。
+# R が大きいほど広域 (ズームアウト) になる。
+TILE_CAMERA_SCALES: list[int] = [4, 8, 16, 32]
+# 出力 PNG の一辺 (px)
+TILE_CAMERA_OUTPUT_PX = 3000
+# JMA オーバーレイ画像の不透明度 (0=透明 / 255=不透明)。
+# 既定 160 ≒ 63% でベースマップの地物と雨雲の両方が読める。
+TILE_CAMERA_OVERLAY_ALPHA = 160
+
 # ── JMA Nowcast API ───────────────────────────────────────────────────────
 # N2: 予報時刻リスト（basetime + 5〜60分先の validtime）。発報判定に使う。
 # N1: 実況時刻リスト（basetime==validtime）。「降雨実績」判定に使う。
