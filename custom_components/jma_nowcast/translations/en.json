@@ -80,6 +80,9 @@
     },
     "button": {
       "refresh": { "name": "Check Now" }
+    },
+    "camera": {
+      "tile": { "name": "Monitoring Tile" }
     }
   },
   "selector": {

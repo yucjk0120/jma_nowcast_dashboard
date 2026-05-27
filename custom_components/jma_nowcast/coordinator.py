@@ -182,6 +182,10 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._rain_ended_at:     datetime | None = None
         self._last_rain_observed_at: datetime | None = None
 
+        # ── 最新観測タイル (camera エンティティが参照) ──
+        self.latest_observation_image: bytes | None = None
+        self.latest_observation_at:    datetime | None = None
+
         _LOGGER.debug(
             "Coordinator init: tile=%s/%s/%s px=%s,%s radius=%sm (%spx) coverage=%s cooldowns=%s/%s min",
             ZOOM, self._tile_x, self._tile_y, self._px, self._py,
@@ -197,12 +201,12 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     # ── タイル取得・解析の共通ヘルパ ──
-    async def _fetch_and_check_tile(
+    async def _fetch_tile_bytes(
         self,
         session: aiohttp.ClientSession,
         basetime: str,
         validtime: str,
-    ) -> tuple[bool, float, float] | None:
+    ) -> bytes | None:
         url = JMA_TILE_URL.format(
             basetime=basetime, validtime=validtime,
             z=ZOOM, x=self._tile_x, y=self._tile_y,
@@ -210,10 +214,12 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             async with session.get(url) as tr:
                 tr.raise_for_status()
-                img_bytes = await tr.read()
+                return await tr.read()
         except aiohttp.ClientError as exc:
             _LOGGER.warning("Tile fetch failed (%s): %s", url, exc)
             return None
+
+    async def _analyze_tile(self, img_bytes: bytes) -> tuple[bool, float, float]:
         return await self.hass.async_add_executor_job(
             _sync_check_tile,
             img_bytes,
@@ -223,6 +229,17 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._coverage_ratio,
             self.trigger_coverage,
         )
+
+    async def _fetch_and_check_tile(
+        self,
+        session: aiohttp.ClientSession,
+        basetime: str,
+        validtime: str,
+    ) -> tuple[bool, float, float] | None:
+        img_bytes = await self._fetch_tile_bytes(session, basetime, validtime)
+        if img_bytes is None:
+            return None
+        return await self._analyze_tile(img_bytes)
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -314,18 +331,20 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         if result["first_rain_in_minutes"] is None:
                             result["first_rain_in_minutes"] = mins
 
-                # ③ 実況タイル取得（N1 の最新）
+                # ③ 実況タイル取得（N1 の最新）+ camera 用にバイトを保存
                 if entries_n1:
                     obs_entry = entries_n1[0]  # 最も新しい観測時刻
                     obs_basetime  = obs_entry.get("basetime",  obs_entry["validtime"])
                     obs_validtime = obs_entry.get("validtime", obs_basetime)
-                    checked = await self._fetch_and_check_tile(session, obs_basetime, obs_validtime)
-                    if checked is not None:
-                        obs_triggered, obs_mm, obs_cov = checked
+                    img_bytes = await self._fetch_tile_bytes(session, obs_basetime, obs_validtime)
+                    if img_bytes is not None:
+                        self.latest_observation_image = img_bytes
+                        self.latest_observation_at = _parse_jma_dt(obs_validtime)
+                        obs_triggered, obs_mm, obs_cov = await self._analyze_tile(img_bytes)
                         result["rain_observed"]     = obs_triggered
                         result["observed_mm"]       = obs_mm
                         result["observed_coverage"] = obs_cov
-                        result["observed_at"]      = _parse_jma_dt(obs_validtime).strftime("%H:%M")
+                        result["observed_at"]      = self.latest_observation_at.strftime("%H:%M")
 
                 # ④ ステートマシン更新
                 self._tick_state_machine(

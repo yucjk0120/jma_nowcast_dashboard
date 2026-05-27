@@ -12,6 +12,7 @@
 - 🎯 **発報カバレッジ** 5 段階（1ピクセルでも / 25% / 50% / 75% / 100%）
 - 🕐 **発報クールダウン** — 空振り後・降雨後それぞれ独立に待ち時間を設定可能
 - 👁️ **降雨実況** を JMA N1 タイルから取得し記録（HA recorder で履歴化）
+- 🖼️ **監視範囲タイル** camera エンティティ — Dashboard に貼って雨雲と自分の半径円を視覚的に確認
 - ⚙️ **UIから全設定変更**可能（YAML編集不要）
 - 🔔 `binary_sensor` の変化をトリガーにした**自動化**で通知連携
 - 🔄 **手動更新ボタン**でいつでも即時確認
@@ -30,6 +31,7 @@
 | `sensor.jma_nowcast_30min` | Sensor | 30分後の予測降水量 (mm/h) |
 | `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) |
 | `button.jma_nowcast_refresh` | Button | 今すぐ確認（手動更新） |
+| `camera.jma_nowcast_tile` | Camera | 最新 JMA タイル + 半径円・ピクセル格子のオーバーレイ画像。Dashboard の Picture Entity カードに貼ると監視範囲を視覚化できる |
 
 ## インストール
 
@@ -114,6 +116,20 @@ POST_RAIN_WAIT (alert OFF / 降雨後待機)
 
 `sensor.jma_nowcast_alert_state` で現在の状態を確認できます。
 attributes に `last_alert_at` / `last_rain_observed_at` / `rain_ended_at` などのタイムスタンプも入っています。
+
+## 監視範囲タイル (camera) を Dashboard に表示する
+
+`camera.jma_nowcast_tile` は最新の JMA 観測タイル (250m メッシュ) に
+監視範囲の半径円とピクセル格子線を重ねた PNG を返します。Picture Entity
+カードに貼ると、自分の監視範囲を視覚化できます。
+
+```yaml
+type: picture-entity
+entity: camera.jma_nowcast_tile
+camera_view: live
+show_state: false
+show_name: false
+```
 
 ## 必要要件
 
