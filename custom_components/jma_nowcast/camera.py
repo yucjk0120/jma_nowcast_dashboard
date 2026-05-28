@@ -47,8 +47,13 @@ _TILE_PX = 256
 _EARTH_CIRCUMFERENCE_M = 40_075_016.686
 # JMA HRPNS のタイルが提供されるズーム域
 _JMA_ZOOM_MIN, _JMA_ZOOM_MAX = 4, 10
-# 1 レイヤあたりタイル枚数の上限 (一辺)。R=32 × 大半径でも 12×12 で収まる。
-_MAX_TILES_PER_SIDE = 12
+# タイル枚数の予算 (一辺の "連続" タイル数の上限)。窓がタイル境界を跨ぐ
+# 最悪ケースを考慮すると、実際の取得枚数は一辺 budget+1 まで増え得る。
+#   GSI: budget=1 → 一辺最大 2 → 最大 2×2 = 4 枚 / カメラ。
+#        基図のズームを抑え速度優先 (代わりに 6〜8 倍程度アップサンプル)。
+#   JMA: budget=12 → JMA 観測オーバーレイは画質優先で広めに取る。
+_GSI_TILE_BUDGET = 1
+_JMA_TILE_BUDGET = 12
 # 1 回の grid 取得で同時に走らせる aiohttp リクエスト数
 _FETCH_CONCURRENCY = 8
 
@@ -385,7 +390,7 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
         base_z = _pick_zoom(
             lat, image_extent_m,
             z_min=0, z_max=GSI_MAX_ZOOM,
-            max_tiles_per_side=_MAX_TILES_PER_SIDE,
+            max_tiles_per_side=_GSI_TILE_BUDGET,
         )
         base_cx, base_cy = _global_pixel(lat, lon, base_z)
         base_window_px = image_extent_m / _mpp(lat, base_z)
@@ -397,7 +402,7 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
         ovl_z = _pick_zoom(
             lat, image_extent_m,
             z_min=_JMA_ZOOM_MIN, z_max=_JMA_ZOOM_MAX,
-            max_tiles_per_side=_MAX_TILES_PER_SIDE,
+            max_tiles_per_side=_JMA_TILE_BUDGET,
         )
         ovl_cx, ovl_cy = _global_pixel(lat, lon, ovl_z)
         ovl_window_px = image_extent_m / _mpp(lat, ovl_z)
