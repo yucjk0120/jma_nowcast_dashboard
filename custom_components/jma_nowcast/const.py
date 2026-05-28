@@ -88,6 +88,10 @@ COVERAGE_RATIOS = {
 # 利用規約: https://maps.gsi.go.jp/development/ichiran.html (出典明記必要)
 GSI_PALE_TILE_URL = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png"
 GSI_MAX_ZOOM = 18
+# 取得済みタイルのディスクキャッシュ位置 (hass.config.path 起点)。
+# GSI 淡色は実質不変なので、HA 再起動を跨いで永続化する。
+# ユーザーがクリアしたければ /config 配下のこのディレクトリを削除すればよい。
+GSI_PALE_CACHE_SUBDIR = "jma_nowcast_cache/gsi_pale"
 
 # ── 監視範囲タイル camera ────────────────────────────────────────────────
 # 各カメラエンティティで「監視範囲の円が画像幅の 1/R になる」R の一覧。

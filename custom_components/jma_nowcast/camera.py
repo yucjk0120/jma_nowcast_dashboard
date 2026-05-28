@@ -1,12 +1,18 @@
 """Camera platform for JMA Nowcast — 監視範囲タイル (4 スケール)。
 
 各カメラエンティティは 1024×1024 px の PNG を返す:
-  - 下層: 国土地理院 (GSI) 淡色地図
-  - 上層: JMA HRPNS 降水ナウキャストの最新観測タイル (半透明オーバーレイ)
+  - 下層: 国土地理院 (GSI) 淡色地図 — アップサンプルが発生しない最小ズーム
+          を都度選択し、BICUBIC ダウンサンプルのみで描画する
+  - 上層: JMA HRPNS 降水ナウキャストの最新観測タイル (半透明オーバーレイ、
+          z=10 が native のため画角によっては NEAREST アップサンプル)
   - 監視位置の半径円と中心マーカーをその上に描画
 
 監視位置は常に画像中央 (512, 512)。複数タイルをまたぐ場合は連結して
-クロップし、必要なら BICUBIC で 1024px に拡縮する。
+クロップし、1024 px にダウンサンプルする。
+
+GSI タイルは {hass.config.path}/jma_nowcast_cache/gsi_pale/{z}/{x}/{y}.png
+にディスクキャッシュされ、HA 再起動を跨いで再利用される
+(初回は cold-cache で時間がかかるが、2 回目以降は即時応答)。
 
 スケール R = 4 / 8 / 16 / 32 で 4 つのカメラを生成する。
 R は「監視範囲の円が画像幅の 1/R」を表す（R が大きい = より広域）。
@@ -17,6 +23,7 @@ import asyncio
 import logging
 import math
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Callable
 
 import aiohttp
@@ -31,6 +38,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DOMAIN,
     GSI_MAX_ZOOM,
+    GSI_PALE_CACHE_SUBDIR,
     GSI_PALE_TILE_URL,
     JMA_TILE_URL,
     TILE_CAMERA_OUTPUT_PX,
@@ -47,12 +55,9 @@ _TILE_PX = 256
 _EARTH_CIRCUMFERENCE_M = 40_075_016.686
 # JMA HRPNS のタイルが提供されるズーム域
 _JMA_ZOOM_MIN, _JMA_ZOOM_MAX = 4, 10
-# タイル枚数の予算 (一辺の "連続" タイル数の上限)。窓がタイル境界を跨ぐ
-# 最悪ケースを考慮すると、実際の取得枚数は一辺 budget+1 まで増え得る。
-#   GSI: budget=1 → 一辺最大 2 → 最大 2×2 = 4 枚 / カメラ。
-#        基図のズームを抑え速度優先 (代わりに 6〜8 倍程度アップサンプル)。
-#   JMA: budget=12 → JMA 観測オーバーレイは画質優先で広めに取る。
-_GSI_TILE_BUDGET = 1
+# JMA オーバーレイのタイル枚数予算 (一辺の連続タイル数の上限)。
+# 観測オーバーレイは画質優先で広めに取る。
+# GSI 側は no-upsample 方針 (_pick_zoom_no_upsample) で別途決める。
 _JMA_TILE_BUDGET = 12
 # 1 回の grid 取得で同時に走らせる aiohttp リクエスト数
 _FETCH_CONCURRENCY = 8
@@ -119,6 +124,39 @@ def _pick_zoom(
     return max(z_min, min(z_max, z_budget))
 
 
+def _pick_zoom_no_upsample(
+    lat: float,
+    image_extent_m: float,
+    output_px: int,
+    *,
+    z_min: int,
+    z_max: int,
+) -> int:
+    """1 ソースピクセル ≤ 1 画像ピクセル を保証する最小ズームを返す。
+
+    ソース窓のピクセル数 (= image_extent_m / mpp(z)) が output_px 以上に
+    なる最小の z。これを満たせば PIL のリサイズは BICUBIC ダウンサンプル
+    のみとなり、ブラー (アップサンプル) は発生しない。
+    z_max を超えてもなお不足する場合は z_max を返す
+    (実用上、GSI z=18 なら出力 1024 で半径 100m × ×4 でも満たせる)。
+    """
+    if image_extent_m <= 0 or output_px <= 0:
+        return z_max
+    cos_lat = max(math.cos(math.radians(lat)), 1e-6)
+    # src_window_px = image_extent_m * 2^z * 256 / (C * cos_lat) / 256
+    #               = image_extent_m * 2^z / (C * cos_lat) * 256? いやそのまま:
+    # window_px = image_extent_m / mpp(z) = image_extent_m * 2^z * 256 / (C*cos_lat) / 256
+    # を整理すると  window_px = image_extent_m * 2^z * 256 / (C * cos_lat)  ではなく
+    # mpp(z) = C*cos_lat/(2^z * _TILE_PX) なので
+    # window_px = image_extent_m / mpp(z) = image_extent_m * 2^z * _TILE_PX / (C*cos_lat)
+    # window_px >= output_px  ⇔  2^z >= output_px * C * cos_lat / (_TILE_PX * extent)
+    z = int(math.ceil(math.log2(
+        output_px * _EARTH_CIRCUMFERENCE_M * cos_lat
+        / (_TILE_PX * image_extent_m)
+    )))
+    return max(z_min, min(z_max, z))
+
+
 def _tile_range(
     cx: float, cy: float, src_window_px: float
 ) -> tuple[int, int, int, int]:
@@ -178,6 +216,50 @@ async def _fetch_grid(
                 continue
             out[(tx, ty)] = cache.get(cache_key(zoom, tx % n, ty))
     return out
+
+
+# ── GSI ディスクキャッシュ ────────────────────────────────────────────
+# パス: {hass.config.path(GSI_PALE_CACHE_SUBDIR)}/{z}/{x}/{y}.png
+# 同一プロセス内のメモリキャッシュ (_GSI_CACHE) の永続化バックエンド。
+# HA 再起動でメモリキャッシュは消えるが、ディスク経由で即時再ヒットさせる。
+# 取得済みタイルしか書かないので、ユーザーが訪れた範囲のみが残る。
+
+def _gsi_disk_path(cache_root: Path, z: int, x: int, y: int) -> Path:
+    return cache_root / str(z) / str(x) / f"{y}.png"
+
+
+def _gsi_load_from_disk(
+    cache_root: Path,
+    keys: list[tuple[int, int, int]],
+) -> dict[tuple[int, int, int], bytes]:
+    """指定キーのタイルをディスクから読む。無いものはスキップ。"""
+    out: dict[tuple[int, int, int], bytes] = {}
+    for key in keys:
+        z, x, y = key
+        path = _gsi_disk_path(cache_root, z, x, y)
+        try:
+            if path.is_file():
+                out[key] = path.read_bytes()
+        except OSError as exc:
+            _LOGGER.debug("GSI disk read failed %s: %s", path, exc)
+    return out
+
+
+def _gsi_save_to_disk(
+    cache_root: Path,
+    entries: dict[tuple[int, int, int], bytes],
+) -> None:
+    """新規取得したタイルをディスクに永続化 (atomic rename)。"""
+    for key, data in entries.items():
+        z, x, y = key
+        path = _gsi_disk_path(cache_root, z, x, y)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".png.tmp")
+            tmp.write_bytes(data)
+            tmp.replace(path)  # 同一 FS なら atomic
+        except OSError as exc:
+            _LOGGER.warning("GSI disk write failed %s: %s", path, exc)
 
 
 def _evict_old_jma_entries(basetime: str, validtime: str) -> None:
@@ -387,10 +469,10 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
         circle_radius_px = out_px // (2 * self._scale)
 
         # ── ベース地図 (GSI 淡色) ──
-        base_z = _pick_zoom(
-            lat, image_extent_m,
+        # アップサンプル無し: ソース窓 ≥ 出力 px となる最小ズームを選ぶ。
+        base_z = _pick_zoom_no_upsample(
+            lat, image_extent_m, out_px,
             z_min=0, z_max=GSI_MAX_ZOOM,
-            max_tiles_per_side=_GSI_TILE_BUDGET,
         )
         base_cx, base_cy = _global_pixel(lat, lon, base_z)
         base_window_px = image_extent_m / _mpp(lat, base_z)
@@ -411,7 +493,27 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
         )
 
         session = async_get_clientsession(self.hass)
+        cache_root = Path(self.hass.config.path(GSI_PALE_CACHE_SUBDIR))
 
+        # GSI: メモリに無いキーをまずディスクから掘り起こす → fetch_grid →
+        # HTTP で新規取得したものをディスクに書き戻す。
+        base_z_n = 2 ** base_z
+        disk_check_keys: list[tuple[int, int, int]] = []
+        for tx in range(base_tx0, base_tx1 + 1):
+            for ty in range(base_ty0, base_ty1 + 1):
+                if not (0 <= ty < base_z_n):
+                    continue
+                k = (base_z, tx % base_z_n, ty)
+                if k not in _GSI_CACHE:
+                    disk_check_keys.append(k)
+        if disk_check_keys:
+            loaded = await self.hass.async_add_executor_job(
+                _gsi_load_from_disk, cache_root, disk_check_keys,
+            )
+            if loaded:
+                _GSI_CACHE.update(loaded)
+
+        before_fetch = set(_GSI_CACHE.keys())
         base_tiles = await _fetch_grid(
             session,
             url_fn=lambda z, x, y: GSI_PALE_TILE_URL.format(z=z, x=x, y=y),
@@ -420,6 +522,12 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
             zoom=base_z,
             tx0=base_tx0, ty0=base_ty0, tx1=base_tx1, ty1=base_ty1,
         )
+        new_keys = set(_GSI_CACHE.keys()) - before_fetch
+        if new_keys:
+            new_entries = {k: _GSI_CACHE[k] for k in new_keys}
+            await self.hass.async_add_executor_job(
+                _gsi_save_to_disk, cache_root, new_entries,
+            )
 
         basetime  = coord.latest_observation_basetime
         validtime = coord.latest_observation_validtime
