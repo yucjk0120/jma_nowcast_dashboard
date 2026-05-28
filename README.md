@@ -147,10 +147,17 @@ Picture Entity カード例:
 ```yaml
 type: picture-entity
 entity: camera.jma_nowcast_tile_x16
-camera_view: live
+camera_view: auto      # 推奨: 静止画の定期ポーリング。`live` (MJPEG ストリーム) より軽い
 show_state: false
 show_name: false
 ```
+
+> `camera_view: live` にすると `/api/camera_proxy_stream` 経由の MJPEG
+> ストリームになります。常時開きっぱなしのダッシュボードでは無駄が多い
+> ので、初期表示の速さも考慮して `auto` (= 静止画) を推奨します。
+> カメラをクリックして拡大した時はどちらの設定でも HA がストリームを
+> 使いますが、本統合の camera は JPEG (q=92) を返すよう調整済みです
+> (PNG 比 4〜6 倍小さく、MJPEG プロトコルとの相性も良い)。
 
 > 出典: 気象庁 高解像度降水ナウキャスト / 国土地理院 淡色地図。
 >

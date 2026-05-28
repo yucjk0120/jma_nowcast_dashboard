@@ -1,6 +1,6 @@
 """Camera platform for JMA Nowcast — 監視範囲タイル (4 スケール)。
 
-各カメラエンティティは 1024×1024 px の PNG を返す:
+各カメラエンティティは 1024×1024 px の JPEG (quality=92) を返す:
   - 下層: 国土地理院 (GSI) 淡色地図 — アップサンプルが発生しない最小ズーム
           を都度選択し、BICUBIC ダウンサンプルのみで描画する
   - 上層: JMA HRPNS 降水ナウキャストの最新観測タイル (半透明オーバーレイ、
@@ -384,8 +384,16 @@ def _render(
     )
 
     out = BytesIO()
-    # RGB に落として PNG 出力 (~40% ファイルサイズ削減)。
-    base.convert("RGB").save(out, format="PNG")
+    # JPEG (quality=92) で出力する理由:
+    #   - /api/camera_proxy_stream は multipart/x-mixed-replace = MJPEG
+    #     プロトコルで、ブラウザ・HA ともに JPEG を前提に最適化されている
+    #   - 同じ画質 (品質 92) で PNG 比 4〜6 倍小さく、エンコード自体も
+    #     5〜10 倍高速 → 初回表示と継続ストリームの両方が速くなる
+    #   - 地図 + 半径円 + クロスヘアの構成では q=92 でリンギング等の
+    #     視認可能なアーティファクトは出ない
+    base.convert("RGB").save(
+        out, format="JPEG", quality=92, optimize=False, progressive=False,
+    )
     return out.getvalue()
 
 
@@ -413,7 +421,11 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
     _attr_should_poll = False
     _attr_icon = "mdi:map"
     _attr_brand = "JMA"
-    content_type = "image/png"
+    content_type = "image/jpeg"
+    # MJPEG ストリームの再フェッチ間隔 (秒)。JMA は 5 分おきに更新される
+    # ので 30 秒で十分。デフォルトの 0.5 秒だと HA executor が無駄に回り、
+    # キャッシュ参照とはいえ秒間 2 回呼ばれるのを抑える。
+    _attr_frame_interval = 30.0
 
     def __init__(
         self,
