@@ -13,6 +13,8 @@ CONF_TRIGGER_COVERAGE      = "trigger_coverage"
 CONF_NO_RAIN_COOLDOWN_MIN  = "no_rain_cooldown_min"
 CONF_POST_RAIN_COOLDOWN_MIN = "post_rain_cooldown_min"
 CONF_SCAN_INTERVAL         = "scan_interval"
+# 監視範囲タイル camera に JMA ピクセル格子をオーバーレイ描画するかどうか
+CONF_SHOW_GRID             = "show_grid"
 
 # フォーム専用キー（保存はされない）
 CONF_LOCATION         = "location"        # LocationSelector の返却 dict
@@ -30,6 +32,7 @@ DEFAULT_TRIGGER_COVERAGE      = "any"
 DEFAULT_NO_RAIN_COOLDOWN_MIN  = 30   # 新規セットアップ時のデフォルト
 DEFAULT_POST_RAIN_COOLDOWN_MIN = 60  # 新規セットアップ時のデフォルト
 DEFAULT_SCAN_INTERVAL         = 5    # minutes
+DEFAULT_SHOW_GRID             = False
 # v2→v3 マイグレーション時のクールダウン値（旧挙動を維持するため 0）
 MIGRATION_NO_RAIN_COOLDOWN_MIN  = 0
 MIGRATION_POST_RAIN_COOLDOWN_MIN = 0

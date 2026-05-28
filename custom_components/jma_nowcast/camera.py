@@ -5,6 +5,7 @@
           を都度選択し、BICUBIC ダウンサンプルのみで描画する
   - 上層: JMA HRPNS 降水ナウキャストの最新観測タイル (半透明オーバーレイ、
           z=10 が native のため画角によっては NEAREST アップサンプル)
+  - オプション: JMA データのピクセル境界 (雨量メッシュ) を細い格子線で重ねる
   - 監視位置の半径円と中心マーカーをその上に描画
 
 監視位置は常に画像中央 (512, 512)。複数タイルをまたぐ場合は連結して
@@ -68,6 +69,11 @@ _RADIUS_COLOR       = (220,  20,  20, 235)
 _RADIUS_HALO_COLOR  = (255, 255, 255, 200)
 _CENTER_FILL        = (220,  20,  20, 255)
 _CENTER_OUTLINE     = (255, 255, 255, 255)
+# 格子オーバーレイ: ごく薄いグレー、細線
+_GRID_COLOR         = ( 90,  90,  90,  70)
+# JMA ピクセルが画像上で何 px 以下なら格子を描かないか
+# (これ未満だと格子線で雨雲ブロックが潰れて見えなくなる)
+_GRID_MIN_PIXEL_SIZE = 6
 
 # ── プロセスワイド タイルキャッシュ ─────────────────────────────────
 # GSI 淡色地図は実質不変なので無期限に保持する (キーは zoom/x/y)。
@@ -313,6 +319,55 @@ def _layer_image(
     return crop
 
 
+def _compose_jma_grid(
+    base: Image.Image,
+    ovl_cx: float, ovl_cy: float,
+    ovl_window_px: float,
+    output_px: int,
+) -> Image.Image:
+    """JMA ピクセル境界に細い格子線を引いた透明レイヤを base に合成する。
+
+    JMA タイル zoom のソースピクセル境界 (整数座標) を画像座標へ写像し、
+    1 JMA pixel = scale 画像 px の間隔で縦横線を引く。
+    scale が _GRID_MIN_PIXEL_SIZE 未満になる広域カメラでは描画スキップ。
+    """
+    if ovl_window_px <= 0:
+        return base
+    scale = output_px / ovl_window_px  # 1 source px → scale image px
+    if scale < _GRID_MIN_PIXEL_SIZE:
+        return base
+
+    layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+
+    win_left_src = ovl_cx - ovl_window_px / 2
+    win_top_src  = ovl_cy - ovl_window_px / 2
+
+    # 窓内に入る最初のソース整数境界 → 画像座標に変換
+    first_src_x = math.ceil(win_left_src)
+    first_src_y = math.ceil(win_top_src)
+    first_img_x = (first_src_x - win_left_src) * scale
+    first_img_y = (first_src_y - win_top_src) * scale
+
+    # 縦線
+    x = first_img_x
+    while x < output_px:
+        xi = int(round(x))
+        if 0 <= xi < output_px:
+            draw.line([(xi, 0), (xi, output_px - 1)], fill=_GRID_COLOR, width=1)
+        x += scale
+
+    # 横線
+    y = first_img_y
+    while y < output_px:
+        yi = int(round(y))
+        if 0 <= yi < output_px:
+            draw.line([(0, yi), (output_px - 1, yi)], fill=_GRID_COLOR, width=1)
+        y += scale
+
+    return Image.alpha_composite(base, layer)
+
+
 def _render(
     base_tiles: dict | None,
     base_tx0: int, base_ty0: int, base_tx1: int, base_ty1: int,
@@ -323,8 +378,9 @@ def _render(
     output_px: int,
     overlay_alpha: int,
     circle_radius_px: int,
+    show_grid: bool,
 ) -> bytes:
-    """ベース → オーバーレイ → 半径円 / 中心マーカー の順に重ねて PNG にする。"""
+    """ベース → オーバーレイ → 格子 → 半径円 / 中心マーカー の順に重ねて JPEG にする。"""
 
     if base_tiles is not None:
         base = _layer_image(
@@ -350,6 +406,10 @@ def _render(
         )
         overlay.putalpha(a)
         base = Image.alpha_composite(base, overlay)
+
+    # JMA ピクセル格子 (オーバーレイがある時のみ意味があるので gating)
+    if show_grid and overlay_tiles is not None:
+        base = _compose_jma_grid(base, ovl_cx, ovl_cy, ovl_window_px, output_px)
 
     draw = ImageDraw.Draw(base)
     cx = cy = output_px // 2
@@ -460,6 +520,7 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
             coord.lat, coord.lon, coord.radius_meters,
             coord.latest_observation_basetime,
             coord.latest_observation_validtime,
+            coord.show_grid,
         )
         if self._cache_token == token and self._cached_png is not None:
             return self._cached_png
@@ -568,6 +629,7 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
             out_px,
             TILE_CAMERA_OVERLAY_ALPHA,
             circle_radius_px,
+            coord.show_grid,
         )
 
     @property
@@ -585,5 +647,6 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
             "center_lat":               coord.lat,
             "center_lon":               coord.lon,
             "radius_m":                 coord.radius_meters,
+            "show_grid":                coord.show_grid,
             "attribution":              "JMA / 国土地理院",
         }

@@ -31,6 +31,7 @@ from .const import (
     CONF_RADIUS_METERS,
     CONF_RESET_TO_HOME,
     CONF_SCAN_INTERVAL,
+    CONF_SHOW_GRID,
     CONF_THRESHOLD_MM,
     CONF_TRIGGER_COVERAGE,
     DEFAULT_FORECAST_MINUTES,
@@ -38,6 +39,7 @@ from .const import (
     DEFAULT_POST_RAIN_COOLDOWN_MIN,
     DEFAULT_RADIUS_METERS,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SHOW_GRID,
     DEFAULT_THRESHOLD_MM,
     DEFAULT_TRIGGER_COVERAGE,
     DOMAIN,
@@ -57,6 +59,7 @@ def _build_form_schema(
     default_no_rain_cooldown: int,
     default_post_rain_cooldown: int,
     default_interval: int,
+    default_show_grid: bool,
     include_reset: bool,
 ) -> vol.Schema:
     """ConfigFlow / OptionsFlow 共通のスキーマを組み立てる。"""
@@ -102,6 +105,7 @@ def _build_form_schema(
         vol.Required(CONF_SCAN_INTERVAL, default=default_interval): NumberSelector(
             NumberSelectorConfig(min=5, max=30, step=5, mode=NumberSelectorMode.SLIDER)
         ),
+        vol.Optional(CONF_SHOW_GRID, default=default_show_grid): BooleanSelector(),
     })
     return vol.Schema(fields)
 
@@ -132,6 +136,7 @@ def _split_user_input(
         CONF_NO_RAIN_COOLDOWN_MIN:   int(user_input.get(CONF_NO_RAIN_COOLDOWN_MIN, DEFAULT_NO_RAIN_COOLDOWN_MIN)),
         CONF_POST_RAIN_COOLDOWN_MIN: int(user_input.get(CONF_POST_RAIN_COOLDOWN_MIN, DEFAULT_POST_RAIN_COOLDOWN_MIN)),
         CONF_SCAN_INTERVAL:          int(user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+        CONF_SHOW_GRID:              bool(user_input.get(CONF_SHOW_GRID, DEFAULT_SHOW_GRID)),
     }
 
 
@@ -160,6 +165,7 @@ class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
             default_no_rain_cooldown=DEFAULT_NO_RAIN_COOLDOWN_MIN,
             default_post_rain_cooldown=DEFAULT_POST_RAIN_COOLDOWN_MIN,
             default_interval=DEFAULT_SCAN_INTERVAL,
+            default_show_grid=DEFAULT_SHOW_GRID,
             include_reset=False,  # 初回はリセット不要（既にHAホームが初期値）
         )
         return self.async_show_form(step_id="user", data_schema=schema)
@@ -215,6 +221,7 @@ class JmaNowcastOptionsFlow(OptionsFlow):
             default_post_rain_cooldown=int(current.get(
                 CONF_POST_RAIN_COOLDOWN_MIN, DEFAULT_POST_RAIN_COOLDOWN_MIN)),
             default_interval=int(current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+            default_show_grid=bool(current.get(CONF_SHOW_GRID, DEFAULT_SHOW_GRID)),
             include_reset=True,
         )
         return self.async_show_form(step_id="init", data_schema=schema)

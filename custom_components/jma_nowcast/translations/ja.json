@@ -11,7 +11,8 @@
           "trigger_coverage":        "発報カバレッジ",
           "no_rain_cooldown_min":    "空振りクールダウン (分)",
           "post_rain_cooldown_min":  "降雨後クールダウン (分)",
-          "scan_interval":           "更新間隔 (分)"
+          "scan_interval":           "更新間隔 (分)",
+          "show_grid":               "監視範囲タイルに格子を表示"
         },
         "data_description": {
           "location":               "地図上のマーカー位置と円の半径を監視範囲として使用します",
@@ -20,7 +21,8 @@
           "trigger_coverage":       "半径内のどれだけのエリアが閾値超えしたら発報するか",
           "no_rain_cooldown_min":   "発報したが実況で雨が観測されないまま経過した場合、この時間後に発報可能状態へ戻ります (0 = 旧挙動)",
           "post_rain_cooldown_min": "実況で雨が止んでから次の発報を許可するまでの待ち時間 (0 = 旧挙動)",
-          "scan_interval":          "JMA ナウキャストの更新間隔は5分のため、5分推奨"
+          "scan_interval":          "JMA ナウキャストの更新間隔は5分のため、5分推奨",
+          "show_grid":              "ON にすると JMA データのピクセル境界（雨量メッシュ）を細い格子線で重ねます。ズーム時のみ表示されます"
         }
       }
     },
@@ -41,7 +43,8 @@
           "trigger_coverage":        "発報カバレッジ",
           "no_rain_cooldown_min":    "空振りクールダウン (分)",
           "post_rain_cooldown_min":  "降雨後クールダウン (分)",
-          "scan_interval":           "更新間隔 (分)"
+          "scan_interval":           "更新間隔 (分)",
+          "show_grid":               "監視範囲タイルに格子を表示"
         },
         "data_description": {
           "location":               "地図上のマーカー位置と円の半径を監視範囲として使用します",
@@ -51,7 +54,8 @@
           "trigger_coverage":       "半径内のどれだけのエリアが閾値超えしたら発報するか",
           "no_rain_cooldown_min":   "発報したが実況で雨が観測されないまま経過した場合、この時間後に発報可能状態へ戻ります (0 = 即時に戻る)",
           "post_rain_cooldown_min": "実況で雨が止んでから次の発報を許可するまでの待ち時間 (0 = 即時に戻る)",
-          "scan_interval":          "JMA ナウキャストの更新間隔は5分のため、5分推奨"
+          "scan_interval":          "JMA ナウキャストの更新間隔は5分のため、5分推奨",
+          "show_grid":              "ON にすると JMA データのピクセル境界（雨量メッシュ）を細い格子線で重ねます。ズーム時のみ表示されます"
         }
       }
     }

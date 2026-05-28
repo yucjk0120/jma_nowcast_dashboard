@@ -158,6 +158,7 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         no_rain_cooldown_min: int = DEFAULT_NO_RAIN_COOLDOWN_MIN,
         post_rain_cooldown_min: int = DEFAULT_POST_RAIN_COOLDOWN_MIN,
         update_interval_minutes: int = 5,
+        show_grid: bool = False,
     ) -> None:
         self.lat = lat
         self.lon = lon
@@ -167,6 +168,8 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.trigger_coverage = trigger_coverage
         self.no_rain_cooldown_sec  = int(no_rain_cooldown_min)  * 60
         self.post_rain_cooldown_sec = int(post_rain_cooldown_min) * 60
+        # 監視範囲タイル camera 専用フラグ (発報ロジックには影響しない)
+        self.show_grid = bool(show_grid)
 
         self._tile_x, self._tile_y, self._px, self._py = lat_lon_to_tile_pixel(
             lat, lon, ZOOM

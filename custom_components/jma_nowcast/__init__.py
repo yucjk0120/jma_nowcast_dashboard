@@ -17,12 +17,14 @@ from .const import (
     CONF_RADIUS_METERS,
     CONF_RADIUS_PIXELS,        # legacy (v1)
     CONF_SCAN_INTERVAL,
+    CONF_SHOW_GRID,
     CONF_THRESHOLD_MM,
     CONF_TRIGGER_COVERAGE,
     CONF_USE_HA_HOME,          # legacy (v1)
     DEFAULT_FORECAST_MINUTES,
     DEFAULT_RADIUS_METERS,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SHOW_GRID,
     DEFAULT_THRESHOLD_MM,
     DEFAULT_TRIGGER_COVERAGE,
     DOMAIN,
@@ -59,6 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         no_rain_cooldown_min=int(cfg.get(CONF_NO_RAIN_COOLDOWN_MIN, MIGRATION_NO_RAIN_COOLDOWN_MIN)),
         post_rain_cooldown_min=int(cfg.get(CONF_POST_RAIN_COOLDOWN_MIN, MIGRATION_POST_RAIN_COOLDOWN_MIN)),
         update_interval_minutes=int(cfg.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+        show_grid=bool(cfg.get(CONF_SHOW_GRID, DEFAULT_SHOW_GRID)),
     )
 
     await coordinator.async_config_entry_first_refresh()
