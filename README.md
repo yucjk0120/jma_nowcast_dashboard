@@ -26,10 +26,10 @@
 | `sensor.jma_nowcast_alert_state` | Sensor (enum) | 状態機械の現在値: `ready` / `alerted` / `raining` / `post_rain_wait` |
 | `sensor.jma_nowcast_first_rain_minutes` | Sensor | 最初に雨が来るまでの分数 |
 | `sensor.jma_nowcast_summary` | Sensor | 予報サマリー文字列 |
-| `sensor.jma_nowcast_10min` | Sensor | 10分後の予測降水量 (mm/h) |
-| `sensor.jma_nowcast_20min` | Sensor | 20分後の予測降水量 (mm/h) |
-| `sensor.jma_nowcast_30min` | Sensor | 30分後の予測降水量 (mm/h) |
-| `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) |
+| `sensor.jma_nowcast_10min` | Sensor | 10分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
+| `sensor.jma_nowcast_20min` | Sensor | 20分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
+| `sensor.jma_nowcast_30min` | Sensor | 30分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
+| `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
 | `button.jma_nowcast_refresh` | Button | 今すぐ確認（手動更新） |
 | `camera.jma_nowcast_tile_x4`  | Camera | 監視範囲タイル ×4  — 監視円が画像幅の **1/4** （最ズームイン、1024×1024 px） |
 | `camera.jma_nowcast_tile_x8`  | Camera | 監視範囲タイル ×8  — 監視円が画像幅の **1/8** |

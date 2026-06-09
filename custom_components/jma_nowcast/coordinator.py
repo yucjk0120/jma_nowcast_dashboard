@@ -104,13 +104,19 @@ def _sync_check_tile(
     """タイル画像を解析。
 
     戻り値:
-        (triggered, max_mm, coverage_ratio_observed)
+        (triggered, avg_mm, coverage_ratio_observed)
+
+    - triggered: 設定された coverage 基準を満たしたか (発報用)
+    - avg_mm:    範囲内の有効ピクセル (alpha>=50) の **平均** 降水強度。
+                 0mm/h ピクセル (晴) も含めて平均するので、範囲全体の
+                 「面平均の雨量」を反映する。最大強度ではない。
+    - coverage_ratio_observed: 範囲内のうち閾値以上だったピクセル比率。
     """
     img = Image.open(BytesIO(img_bytes)).convert("RGBA")
     pixels = img.load()
     w, h = img.size
 
-    max_mm = 0.0
+    sum_mm = 0.0
     wet = 0
     total = 0
 
@@ -123,8 +129,7 @@ def _sync_check_tile(
                     continue
                 total += 1
                 mm = rgb_to_intensity(red, grn, blu)
-                if mm > max_mm:
-                    max_mm = mm
+                sum_mm += mm
                 if mm >= threshold_mm:
                     wet += 1
 
@@ -132,13 +137,14 @@ def _sync_check_tile(
         return False, 0.0, 0.0
 
     ratio = wet / total
+    avg_mm = sum_mm / total
 
     if coverage_preset == COVERAGE_ANY:
         triggered = wet > 0
     else:
         triggered = ratio >= coverage_ratio
 
-    return triggered, round(max_mm, 1), round(ratio, 3)
+    return triggered, round(avg_mm, 1), round(ratio, 3)
 
 
 # ── コーディネーター ───────────────────────────────────────────────────────
