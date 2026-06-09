@@ -31,10 +31,10 @@
 | `sensor.jma_nowcast_30min` | Sensor | 30分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
 | `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
 | `button.jma_nowcast_refresh` | Button | 今すぐ確認（手動更新） |
-| `camera.jma_nowcast_tile_x4`  | Camera | 監視範囲タイル ×4  — 監視円が画像幅の **1/4** （最ズームイン、1024×1024 px） |
-| `camera.jma_nowcast_tile_x8`  | Camera | 監視範囲タイル ×8  — 監視円が画像幅の **1/8** |
-| `camera.jma_nowcast_tile_x16` | Camera | 監視範囲タイル ×16 — 監視円が画像幅の **1/16** |
-| `camera.jma_nowcast_tile_x32` | Camera | 監視範囲タイル ×32 — 監視円が画像幅の **1/32**（最ズームアウト） |
+| `camera.jma_nowcast_tile_x4`  | Camera | **詳細** — 監視円が画像幅の **1/4** （最ズームイン、1024×1024 px） |
+| `camera.jma_nowcast_tile_x8`  | Camera | **中域** — 監視円が画像幅の **1/8** |
+| `camera.jma_nowcast_tile_x16` | Camera | **広域** — 監視円が画像幅の **1/16** |
+| `camera.jma_nowcast_tile_x32` | Camera | **超広域** — 監視円が画像幅の **1/32**（最ズームアウト） |
 
 ## インストール
 
@@ -135,12 +135,12 @@ attributes に `last_alert_at` / `last_rain_observed_at` / `rain_ended_at` な�
 スケール R は「監視範囲の円が画像幅の `1/R` を占める」を意味します。
 半径 1 km での目安は次のとおり:
 
-| エンティティ | 円の幅比 | 画像が映す一辺 (半径1km時) | 用途 |
-|---|---|---|---|
-| `camera.jma_nowcast_tile_x4`  | 1/4  |  約 8 km  | 半径の周辺だけを大きく見たい時 |
-| `camera.jma_nowcast_tile_x8`  | 1/8  | 約 16 km  | 近接する雨雲を確認 |
-| `camera.jma_nowcast_tile_x16` | 1/16 | 約 32 km  | 都市レベルの雨雲の流れ |
-| `camera.jma_nowcast_tile_x32` | 1/32 | 約 64 km  | 広域の雨雲分布 |
+| エンティティ | 名称 | 円の幅比 | 画像が映す一辺 (半径1km時) | 用途 |
+|---|---|---|---|---|
+| `camera.jma_nowcast_tile_x4`  | 詳細     | 1/4  |  約 8 km  | 半径の周辺だけを大きく見たい時 |
+| `camera.jma_nowcast_tile_x8`  | 中域     | 1/8  | 約 16 km  | 近接する雨雲を確認 |
+| `camera.jma_nowcast_tile_x16` | 広域     | 1/16 | 約 32 km  | 都市レベルの雨雲の流れ |
+| `camera.jma_nowcast_tile_x32` | 超広域   | 1/32 | 約 64 km  | 広域の雨雲分布 |
 
 Picture Entity カード例:
 
