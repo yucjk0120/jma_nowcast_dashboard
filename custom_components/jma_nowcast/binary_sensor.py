@@ -1,10 +1,7 @@
 """Binary sensor platform for JMA Nowcast."""
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-)
+from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -22,7 +19,6 @@ async def async_setup_entry(
     coordinator: JmaNowcastCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
         JmaNowcastRainDetectedSensor(coordinator, entry),
-        JmaNowcastRainObservedSensor(coordinator, entry),
     ])
 
 
@@ -30,12 +26,16 @@ class JmaNowcastRainDetectedSensor(JmaNowcastEntity, BinarySensorEntity):
     """ステートマシン管理の発報センサー。
 
     v1.1 以前はここに「予測の生値」を出していたが、v1.2 以降は
-    クールダウンを含む発報判定を返す。READY/POST_RAIN_WAIT では OFF、
-    ALERTED/RAINING では ON。
+    クールダウンを含む発報判定を返す。READY/POST_RAIN_WAIT では OFF (待機中)、
+    ALERTED/RAINING では ON (発報中)。
+
+    device_class は意図的に未設定。MOISTURE にすると HA フロントエンドが
+    state を wet/dry と表示してしまうため、translation でカスタム状態名
+    (発報中 / 待機中) を提供する方針に切り替えた。
     """
 
-    _attr_device_class = BinarySensorDeviceClass.MOISTURE
     _attr_translation_key = "rain_detected"
+    _attr_icon = "mdi:bell-alert-outline"
 
     def __init__(self, coordinator: JmaNowcastCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry)
@@ -69,34 +69,4 @@ class JmaNowcastRainDetectedSensor(JmaNowcastEntity, BinarySensorEntity):
             # ── メタ ──
             "checked_at":             data.get("checked_at"),
             "location":               data.get("location"),
-        }
-
-
-class JmaNowcastRainObservedSensor(JmaNowcastEntity, BinarySensorEntity):
-    """JMA 実況タイル (N1) で現在降雨があるかを判定するセンサー。"""
-
-    _attr_device_class = BinarySensorDeviceClass.MOISTURE
-    _attr_translation_key = "rain_observed"
-
-    def __init__(self, coordinator: JmaNowcastCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_rain_observed"
-
-    @property
-    def is_on(self) -> bool | None:
-        if self.coordinator.data is None:
-            return None
-        return self.coordinator.data.get("rain_observed", False)
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        if not self.coordinator.data:
-            return {}
-        data = self.coordinator.data
-        return {
-            "observed_mm":           data.get("observed_mm"),
-            "observed_coverage":     data.get("observed_coverage"),
-            "observed_at":           data.get("observed_at"),
-            "last_rain_observed_at": data.get("last_rain_observed_at"),
-            "rain_ended_at":         data.get("rain_ended_at"),
         }

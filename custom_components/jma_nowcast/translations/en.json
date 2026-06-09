@@ -62,8 +62,13 @@
   },
   "entity": {
     "binary_sensor": {
-      "rain_detected": { "name": "Rain Alert" },
-      "rain_observed": { "name": "Rain Observed" }
+      "rain_detected": {
+        "name": "Rain Alert",
+        "state": {
+          "on":  "Alerting",
+          "off": "Standby"
+        }
+      }
     },
     "sensor": {
       "first_rain_minutes": { "name": "First Rain In" },
@@ -77,6 +82,7 @@
           "post_rain_wait": "Post-rain cooldown"
         }
       },
+      "rain_observed_mm":   { "name": "Observed Rainfall" },
       "forecast_10min":     { "name": "In 10 minutes" },
       "forecast_20min":     { "name": "In 20 minutes" },
       "forecast_30min":     { "name": "In 30 minutes" },

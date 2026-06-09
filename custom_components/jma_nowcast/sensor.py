@@ -25,6 +25,7 @@ async def async_setup_entry(
         JmaNowcastFirstRainSensor(coordinator, entry),
         JmaNowcastSummarySensor(coordinator, entry),
         JmaNowcastAlertStateSensor(coordinator, entry),
+        JmaNowcastObservedMmSensor(coordinator, entry),
     ]
     # 全分後センサーを生成（設定外は unavailable になる）
     for mins in ALL_FORECAST_MINUTES:
@@ -119,6 +120,42 @@ class JmaNowcastAlertStateSensor(JmaNowcastEntity, SensorEntity):
             "last_alert_at":          data.get("last_alert_at"),
             "last_rain_observed_at":  data.get("last_rain_observed_at"),
             "rain_ended_at":          data.get("rain_ended_at"),
+        }
+
+
+class JmaNowcastObservedMmSensor(JmaNowcastEntity, SensorEntity):
+    """JMA 実況タイル (N1) から算出した現在の降雨強度センサー。
+
+    監視範囲内ピクセルの面平均 mm/h を返す。発報判定のしきい値や
+    カバレッジ条件と同じ「監視範囲」「面平均」のロジックで計算される。
+    """
+
+    _attr_translation_key = "rain_observed_mm"
+    _attr_native_unit_of_measurement = "mm/h"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:weather-pouring"
+
+    def __init__(self, coordinator: JmaNowcastCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_rain_observed_mm"
+
+    @property
+    def native_value(self) -> float | None:
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("observed_mm")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        if not self.coordinator.data:
+            return {}
+        data = self.coordinator.data
+        return {
+            "observed_coverage":     data.get("observed_coverage"),
+            "observed_at":           data.get("observed_at"),
+            "rain_observed":         data.get("rain_observed"),
+            "last_rain_observed_at": data.get("last_rain_observed_at"),
+            "rain_ended_at":         data.get("rain_ended_at"),
         }
 
 

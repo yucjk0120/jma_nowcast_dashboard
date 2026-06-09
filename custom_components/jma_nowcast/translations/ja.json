@@ -62,8 +62,13 @@
   },
   "entity": {
     "binary_sensor": {
-      "rain_detected": { "name": "降水アラート" },
-      "rain_observed": { "name": "降雨実況" }
+      "rain_detected": {
+        "name": "降水アラート",
+        "state": {
+          "on":  "発報中",
+          "off": "待機中"
+        }
+      }
     },
     "sensor": {
       "first_rain_minutes": { "name": "最初の降水まで" },
@@ -77,6 +82,7 @@
           "post_rain_wait": "降雨後クールダウン"
         }
       },
+      "rain_observed_mm":   { "name": "実況降水量" },
       "forecast_10min":     { "name": "10分後" },
       "forecast_20min":     { "name": "20分後" },
       "forecast_30min":     { "name": "30分後" },
