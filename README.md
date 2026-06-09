@@ -23,7 +23,7 @@
 |---|---|---|
 | `binary_sensor.jma_nowcast_rain_detected` | Binary Sensor | **降水アラート** — **発報中** / **待機中** の2状態。ステートマシン (v1.2+) が管理（詳細は下記） |
 | `sensor.jma_nowcast_alert_state` | Sensor (enum) | 状態機械の現在値: `ready` / `alerted` / `raining` / `post_rain_wait` |
-| `sensor.jma_nowcast_first_rain_minutes` | Sensor | **最初の降水まで** — 設定で有効な「監視する分後」のうち、最も近く降水が予測される時刻 (分)。雨予報なしは `unknown` |
+| `sensor.jma_nowcast_first_rain_minutes` | Sensor | **降水予測** (単位: 分後) — 設定で有効な「監視する分後」のうち、最も近く降水が予測される時刻。UI は「20 分後」と表示。`states()` は値のみ (例: `"20"`) を返す。雨予報なしは `unknown` |
 | `sensor.jma_nowcast_rain_observed_mm` | Sensor | **実況降水量** (mm/h) — JMA 実況タイル (N1) から算出した監視範囲内ピクセルの**面平均** |
 | `sensor.jma_nowcast_summary` | Sensor | 予報サマリー文字列 |
 | `sensor.jma_nowcast_10min` | Sensor | 10分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
@@ -75,7 +75,7 @@ automation:
         data:
           language: "ja"
           message: >
-            {% set mins = state_attr('binary_sensor.jma_nowcast_rain_detected', 'first_rain_in_minutes') %}
+            {% set mins = states('sensor.jma_nowcast_first_rain_minutes') %}
             約 {{ mins }} 分後に雨が降る予測です。洗濯物や傘のご準備をお願いします。
 ```
 

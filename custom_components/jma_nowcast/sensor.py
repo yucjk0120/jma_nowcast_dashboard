@@ -35,10 +35,15 @@ async def async_setup_entry(
 
 
 class JmaNowcastFirstRainSensor(JmaNowcastEntity, SensorEntity):
-    """最初に雨が来るまでの分数センサー。"""
+    """設定で有効な「監視する分後」のうち、最も早く降水が予測される時刻 (分)。
+
+    UI 上は「20 分後」のように単位付きで表示されるが、
+    states('sensor.jma_nowcast_first_rain_minutes') は値のみ (例: "20")
+    を返すため、テンプレートで再利用しやすい。
+    """
 
     _attr_translation_key = "first_rain_minutes"
-    _attr_native_unit_of_measurement = "分"
+    _attr_native_unit_of_measurement = "分後"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:clock-alert-outline"
 

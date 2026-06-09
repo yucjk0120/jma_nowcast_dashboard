@@ -71,7 +71,7 @@
       }
     },
     "sensor": {
-      "first_rain_minutes": { "name": "First Rain In" },
+      "first_rain_minutes": { "name": "Rain forecast" },
       "summary":            { "name": "Forecast Summary" },
       "alert_state": {
         "name": "Alert State",

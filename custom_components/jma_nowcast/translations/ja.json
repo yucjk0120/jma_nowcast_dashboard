@@ -71,7 +71,7 @@
       }
     },
     "sensor": {
-      "first_rain_minutes": { "name": "最初の降水まで" },
+      "first_rain_minutes": { "name": "降水予測" },
       "summary":            { "name": "予報サマリー" },
       "alert_state": {
         "name": "発報状態",
