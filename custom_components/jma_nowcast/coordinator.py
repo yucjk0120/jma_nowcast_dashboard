@@ -165,6 +165,10 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         post_rain_cooldown_min: int = DEFAULT_POST_RAIN_COOLDOWN_MIN,
         update_interval_minutes: int = 5,
         show_grid: bool = False,
+        # ── Alert audio ──
+        alert_tts_entity: str = "",
+        alert_targets: list[str] | None = None,
+        alert_configs: dict[int, tuple[bool, str]] | None = None,
     ) -> None:
         self.lat = lat
         self.lon = lon
@@ -176,6 +180,12 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.post_rain_cooldown_sec = int(post_rain_cooldown_min) * 60
         # 監視範囲タイル camera 専用フラグ (発報ロジックには影響しない)
         self.show_grid = bool(show_grid)
+
+        # ── アラート音声設定 ──
+        # alert_configs: {minutes: (enabled, message_template)}
+        self.alert_tts_entity: str = alert_tts_entity or ""
+        self.alert_targets: list[str] = list(alert_targets or [])
+        self.alert_configs: dict[int, tuple[bool, str]] = dict(alert_configs or {})
 
         self._tile_x, self._tile_y, self._px, self._py = lat_lon_to_tile_pixel(
             lat, lon, ZOOM
@@ -364,6 +374,7 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._tick_state_machine(
                     forecast_triggered=result["any_rain"],
                     rain_observed=result["rain_observed"],
+                    first_rain_min=result.get("first_rain_in_minutes"),
                     now=now,
                 )
                 result["alert"]             = self._is_alert_active()
@@ -388,6 +399,92 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except aiohttp.ClientError as exc:
             raise UpdateFailed(f"JMA API error: {exc}") from exc
 
+    # ── アラート音声再生 ─────────────────────────────────────────────
+    class _SafePlaceholders(dict):
+        """format_map 用に、未定義プレースホルダを '?key?' で残す dict."""
+        def __missing__(self, key: str) -> str:
+            return f"?{key}?"
+
+    def _placeholders_for(self, minutes: int, is_test: bool) -> dict[str, Any]:
+        """メッセージテンプレートに差し込むプレースホルダ dict を作る。"""
+        data = self.data or {}
+        forecasts = data.get("forecasts", {}) if isinstance(data, dict) else {}
+
+        def _mm(key: int) -> str:
+            info = forecasts.get(key) or {}
+            v = info.get("mm")
+            return f"{float(v):.1f}" if isinstance(v, (int, float)) else "-"
+
+        this_mm = _mm(minutes)
+        return {
+            "minutes":     minutes,
+            "mm":          this_mm,
+            "mm_10":       _mm(10),
+            "mm_20":       _mm(20),
+            "mm_30":       _mm(30),
+            "mm_60":       _mm(60),
+            "first_min":   (data.get("first_rain_in_minutes") if isinstance(data, dict) else None) or minutes,
+            "observed_mm": (
+                f"{float(data.get('observed_mm', 0.0)):.1f}"
+                if isinstance(data, dict) and data.get("observed_mm") is not None
+                else "0.0"
+            ),
+            "test":        "（テスト）" if is_test else "",
+        }
+
+    def _render_alert_message(self, minutes: int, is_test: bool) -> str | None:
+        """バケットのテンプレートをプレースホルダで埋めた文字列を返す。
+        未設定/空なら None。テスト時は空でも「テストです」を返す。"""
+        cfg = self.alert_configs.get(minutes)
+        template = cfg[1] if cfg else ""
+        if not template and not is_test:
+            return None
+        if not template and is_test:
+            template = f"{minutes}分後アラートのテスト再生です。"
+        ph = self._placeholders_for(minutes, is_test)
+        try:
+            return template.format_map(self._SafePlaceholders(ph))
+        except (ValueError, IndexError) as exc:
+            _LOGGER.warning("Alert message template error (bucket=%s): %s", minutes, exc)
+            return template
+
+    async def async_play_alert(self, minutes: int, *, is_test: bool = False) -> None:
+        """指定バケットのアラート音声を再生する。
+
+        本番発報 (is_test=False): 設定が無効/未設定なら何もしない。
+        テスト再生   (is_test=True):  設定が無効でも既定文言で再生する。
+                                      ただし TTS entity と targets は必須。
+        """
+        if not self.alert_tts_entity or not self.alert_targets:
+            _LOGGER.debug(
+                "Alert skipped: tts_entity=%r targets=%r",
+                self.alert_tts_entity, self.alert_targets,
+            )
+            return
+        if not is_test:
+            cfg = self.alert_configs.get(minutes)
+            if not cfg or not cfg[0]:  # enabled=False or missing
+                return
+        message = self._render_alert_message(minutes, is_test=is_test)
+        if not message:
+            return
+        _LOGGER.info(
+            "Playing alert (bucket=%s, test=%s): %s -> %s",
+            minutes, is_test, message, self.alert_targets,
+        )
+        try:
+            await self.hass.services.async_call(
+                "tts", "speak",
+                {
+                    "entity_id":               self.alert_tts_entity,
+                    "media_player_entity_id":  self.alert_targets,
+                    "message":                 message,
+                },
+                blocking=False,
+            )
+        except Exception as exc:  # noqa: BLE001 — TTS の失敗で HA を止めない
+            _LOGGER.warning("Alert TTS call failed: %s", exc)
+
     # ── ステートマシン ────────────────────────────────────────────────────
     def _set_state(self, new_state: str, now: datetime) -> None:
         if new_state != self._state:
@@ -403,6 +500,7 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         *,
         forecast_triggered: bool,
         rain_observed: bool,
+        first_rain_min: int | None,
         now: datetime,
     ) -> None:
         # 観測タイムスタンプの更新
@@ -413,6 +511,13 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if forecast_triggered:
                 self._set_state(ALERT_STATE_ALERTED, now)
                 self._last_alert_at = now
+                # READY → ALERTED 遷移時にアラート音声を再生 (最初に降る
+                # バケットの設定を使用)。fire-and-forget でメイン更新
+                # フローをブロックしない。
+                if first_rain_min in (10, 20, 30, 60):
+                    self.hass.async_create_task(
+                        self.async_play_alert(first_rain_min)
+                    )
             return
 
         if self._state == ALERT_STATE_ALERTED:

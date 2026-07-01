@@ -9,6 +9,16 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_ALERT_10_ENABLED,
+    CONF_ALERT_10_MESSAGE,
+    CONF_ALERT_20_ENABLED,
+    CONF_ALERT_20_MESSAGE,
+    CONF_ALERT_30_ENABLED,
+    CONF_ALERT_30_MESSAGE,
+    CONF_ALERT_60_ENABLED,
+    CONF_ALERT_60_MESSAGE,
+    CONF_ALERT_TARGETS,
+    CONF_ALERT_TTS_ENTITY,
     CONF_FORECAST_MINUTES,
     CONF_LATITUDE,
     CONF_LONGITUDE,
@@ -21,6 +31,16 @@ from .const import (
     CONF_THRESHOLD_MM,
     CONF_TRIGGER_COVERAGE,
     CONF_USE_HA_HOME,          # legacy (v1)
+    DEFAULT_ALERT_10_ENABLED,
+    DEFAULT_ALERT_10_MESSAGE,
+    DEFAULT_ALERT_20_ENABLED,
+    DEFAULT_ALERT_20_MESSAGE,
+    DEFAULT_ALERT_30_ENABLED,
+    DEFAULT_ALERT_30_MESSAGE,
+    DEFAULT_ALERT_60_ENABLED,
+    DEFAULT_ALERT_60_MESSAGE,
+    DEFAULT_ALERT_TARGETS,
+    DEFAULT_ALERT_TTS_ENTITY,
     DEFAULT_FORECAST_MINUTES,
     DEFAULT_RADIUS_METERS,
     DEFAULT_SCAN_INTERVAL,
@@ -62,6 +82,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         post_rain_cooldown_min=int(cfg.get(CONF_POST_RAIN_COOLDOWN_MIN, MIGRATION_POST_RAIN_COOLDOWN_MIN)),
         update_interval_minutes=int(cfg.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
         show_grid=bool(cfg.get(CONF_SHOW_GRID, DEFAULT_SHOW_GRID)),
+        alert_tts_entity=str(cfg.get(CONF_ALERT_TTS_ENTITY, DEFAULT_ALERT_TTS_ENTITY) or ""),
+        alert_targets=list(cfg.get(CONF_ALERT_TARGETS, DEFAULT_ALERT_TARGETS) or []),
+        alert_configs={
+            10: (
+                bool(cfg.get(CONF_ALERT_10_ENABLED, DEFAULT_ALERT_10_ENABLED)),
+                str(cfg.get(CONF_ALERT_10_MESSAGE, DEFAULT_ALERT_10_MESSAGE) or ""),
+            ),
+            20: (
+                bool(cfg.get(CONF_ALERT_20_ENABLED, DEFAULT_ALERT_20_ENABLED)),
+                str(cfg.get(CONF_ALERT_20_MESSAGE, DEFAULT_ALERT_20_MESSAGE) or ""),
+            ),
+            30: (
+                bool(cfg.get(CONF_ALERT_30_ENABLED, DEFAULT_ALERT_30_ENABLED)),
+                str(cfg.get(CONF_ALERT_30_MESSAGE, DEFAULT_ALERT_30_MESSAGE) or ""),
+            ),
+            60: (
+                bool(cfg.get(CONF_ALERT_60_ENABLED, DEFAULT_ALERT_60_ENABLED)),
+                str(cfg.get(CONF_ALERT_60_MESSAGE, DEFAULT_ALERT_60_MESSAGE) or ""),
+            ),
+        },
     )
 
     await coordinator.async_config_entry_first_refresh()

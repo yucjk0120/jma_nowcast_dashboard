@@ -14,7 +14,8 @@
 - 👁️ **降雨実況** を JMA N1 タイルから取得し記録（HA recorder で履歴化）
 - 🖼️ **監視範囲タイル** 4 スケール camera エンティティ — GSI 淡色地図 + JMA 半透明オーバーレイ + 半径円。Dashboard で雨雲と自分の半径円を地図と一緒に視覚化
 - ⚙️ **UIから全設定変更**可能（YAML編集不要）
-- 🔔 `binary_sensor` の変化をトリガーにした**自動化**で通知連携
+- 🔊 **アラート音声**を UI から設定可能 — 10/20/30/60分後それぞれに文言を割り当て、対象 media_player も選ぶだけ (v1.5+)
+- 🔔 `binary_sensor` の変化をトリガーにした**自動化**で通知連携（従来通りも可）
 - 🔄 **手動更新ボタン**でいつでも即時確認
 
 ## エンティティ一覧
@@ -31,6 +32,7 @@
 | `sensor.jma_nowcast_30min` | Sensor | 30分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
 | `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
 | `button.jma_nowcast_refresh` | Button | 今すぐ確認（手動更新） |
+| `button.jma_nowcast_test_alert_10min` 〜 `_60min` | Button (config) | アラート音声のテスト再生。各バケット用に 4 個。EntityCategory.CONFIG で分離 |
 | `camera.jma_nowcast_tile_x4`  | Camera | **詳細** — 監視円が画像幅の **1/4** （最ズームイン、1024×1024 px） |
 | `camera.jma_nowcast_tile_x8`  | Camera | **中域** — 監視円が画像幅の **1/8** |
 | `camera.jma_nowcast_tile_x16` | Camera | **広域** — 監視円が画像幅の **1/16** |
@@ -56,7 +58,52 @@
 3. 監視する分後・閾値・カバレッジ・更新間隔を確認して送信
 4. セットアップ後、**「設定」ボタン**から再調整できます。`HA ホームにリセット` を ON で保存すると位置と半径を初期値に戻せます
 
-## Nest デバイスへの音声通知（自動化例）
+## アラート音声（TTS 発報）を UI から設定する
+
+v1.5.0 以降、**設定 → デバイスとサービス → JMA Nowcast → 設定 → アラート音声設定** から、
+発報時 (`READY → ALERTED` 遷移時) に鳴らす TTS メッセージと対象デバイスを UI だけで設定できます。
+自動化 YAML を書かなくても、以下がそのまま組めます:
+
+- **TTS エンティティ** の選択 (例: `tts.google_translate_ja`)
+- **対象 media_player** の複数選択 (例: `media_player.nesthubmax`, `media_player.toire`)
+- **10 / 20 / 30 / 60 分後 それぞれで別の文言**を設定 (有効/無効切替も個別)
+
+「一番早く雨が予測されているバケットの文言」が読み上げられます。
+つまり `first_rain_in_minutes` が 20 なら「20 分後」の文言が使われます。
+
+### メッセージテンプレートで使えるプレースホルダ
+
+| プレースホルダ | 内容 |
+|---|---|
+| `{minutes}` | このバケットの分数 (10 / 20 / 30 / 60) |
+| `{mm}` | このバケットの予想 mm/h (監視範囲内ピクセルの面平均) |
+| `{mm_10}` / `{mm_20}` / `{mm_30}` / `{mm_60}` | 各バケットの予想 mm/h |
+| `{first_min}` | `sensor.jma_nowcast_first_rain_minutes` と同じ値 |
+| `{observed_mm}` | 現在の実況降水量 (mm/h) |
+
+例:
+
+```
+10 分後メッセージ: 約10分後に{mm_10}ミリの雨が降る予想です。
+20 分後メッセージ: 20分後には{mm_20}ミリに強まる見込みです。
+60 分後メッセージ: 約1時間後に雨が予想されています。現在の降水量は{observed_mm}ミリです。
+```
+
+### テスト再生
+
+各バケットに対してテスト用ボタンが用意されています:
+
+- `button.jma_nowcast_test_alert_10min`
+- `button.jma_nowcast_test_alert_20min`
+- `button.jma_nowcast_test_alert_30min`
+- `button.jma_nowcast_test_alert_60min`
+
+これらを押すと、その場でそのバケットの文言 (無効化されている場合は既定文言) を対象デバイスで再生します。
+到達確認・文言確認・音量調整に使えます。
+
+### 自動化で追加ロジックを組む場合（従来通り）
+
+UI 設定を使わず、より複雑な条件で通知したい場合は従来通り自動化で書けます:
 
 ```yaml
 automation:
@@ -67,16 +114,15 @@ automation:
         from: "off"
         to: "on"
     action:
-      - service: tts.google_translate_say
+      - service: tts.speak
         target:
-          entity_id:
+          entity_id: tts.google_translate_ja
+        data:
+          media_player_entity_id:
             - media_player.nesthubmax
             - media_player.toire
-        data:
-          language: "ja"
           message: >
-            {% set mins = states('sensor.jma_nowcast_first_rain_minutes') %}
-            約 {{ mins }} 分後に雨が降る予測です。洗濯物や傘のご準備をお願いします。
+            約 {{ states('sensor.jma_nowcast_first_rain_minutes') }} 分後に雨が降る予測です。
 ```
 
 ## 設定項目

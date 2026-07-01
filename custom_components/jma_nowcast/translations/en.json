@@ -34,6 +34,14 @@
     "step": {
       "init": {
         "title": "JMA Nowcast Settings",
+        "description": "Choose which configuration category to edit.",
+        "menu_options": {
+          "basic":       "Basic settings (location, radius, threshold, cooldowns)",
+          "alert_audio": "Alert audio (TTS)"
+        }
+      },
+      "basic": {
+        "title": "Basic Settings",
         "description": "Adjust monitoring location, radius, trigger conditions, and cooldowns. Enable \"Reset to HA home\" to discard the current map values and revert to HA home with a 1 km radius on save.",
         "data": {
           "location":                "Location and radius",
@@ -56,6 +64,30 @@
           "post_rain_cooldown_min": "Wait this many minutes after observed rain ends before the next alert is allowed (0 = immediate)",
           "scan_interval":          "JMA Nowcast updates every 5 minutes, so 5 min is recommended",
           "show_grid":              "Overlays JMA data pixel boundaries (precipitation mesh) as thin gridlines. Only drawn at zoomed-in scales"
+        }
+      },
+      "alert_audio": {
+        "title": "Alert Audio",
+        "description": "Announce via TTS when the state machine transitions READY→ALERTED. The bucket message matching first_rain_in_minutes (10/20/30/60) is used. Placeholders: {minutes}=this bucket's minutes, {mm}=this bucket's forecast mm/h, {mm_10}/{mm_20}/{mm_30}/{mm_60}=each bucket's forecast mm/h, {first_min}=first rain in minutes, {observed_mm}=current observed mm/h. Use button.jma_nowcast_test_alert_XXmin to test playback.",
+        "data": {
+          "alert_tts_entity":  "TTS entity",
+          "alert_targets":     "Target devices (media_player, multiple)",
+          "alert_10_enabled":  "Enable 10-min alert",
+          "alert_10_message":  "10-min message",
+          "alert_20_enabled":  "Enable 20-min alert",
+          "alert_20_message":  "20-min message",
+          "alert_30_enabled":  "Enable 30-min alert",
+          "alert_30_message":  "30-min message",
+          "alert_60_enabled":  "Enable 60-min alert",
+          "alert_60_message":  "60-min message"
+        },
+        "data_description": {
+          "alert_tts_entity": "TTS entity to use (e.g. tts.google_translate_XX). If unset, no alert is played",
+          "alert_targets":    "Media players to broadcast on. Shared across all buckets",
+          "alert_10_message": "e.g. Rain of {mm} mm/h expected in about 10 minutes",
+          "alert_20_message": "e.g. Rain will intensify to {mm} mm/h in 20 minutes",
+          "alert_30_message": "e.g. Rain of {mm} mm/h expected to continue at 30 minutes",
+          "alert_60_message": "e.g. Rain should end within 60 minutes"
         }
       }
     }
@@ -89,7 +121,11 @@
       "forecast_60min":     { "name": "In 60 minutes" }
     },
     "button": {
-      "refresh": { "name": "Check Now" }
+      "refresh":              { "name": "Check Now" },
+      "test_alert_10min":     { "name": "Test Alert (10 min)" },
+      "test_alert_20min":     { "name": "Test Alert (20 min)" },
+      "test_alert_30min":     { "name": "Test Alert (30 min)" },
+      "test_alert_60min":     { "name": "Test Alert (60 min)" }
     },
     "camera": {
       "tile_x4":  { "name": "Detail" },

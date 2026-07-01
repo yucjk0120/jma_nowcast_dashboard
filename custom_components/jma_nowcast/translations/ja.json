@@ -34,6 +34,14 @@
     "step": {
       "init": {
         "title": "JMA Nowcast 設定",
+        "description": "変更する設定カテゴリを選択してください。",
+        "menu_options": {
+          "basic":       "基本設定 (監視位置・半径・閾値・クールダウン等)",
+          "alert_audio": "アラート音声設定 (TTS 発報)"
+        }
+      },
+      "basic": {
+        "title": "基本設定",
         "description": "監視位置・半径・発報条件・クールダウンを変更できます。「HA ホームにリセット」を ON にすると保存時に位置と半径を初期値に戻します。",
         "data": {
           "location":                "監視位置と半径",
@@ -56,6 +64,30 @@
           "post_rain_cooldown_min": "実況で雨が止んでから次の発報を許可するまでの待ち時間 (0 = 即時に戻る)",
           "scan_interval":          "JMA ナウキャストの更新間隔は5分のため、5分推奨",
           "show_grid":              "ON にすると JMA データのピクセル境界（雨量メッシュ）を細い格子線で重ねます。ズーム時のみ表示されます"
+        }
+      },
+      "alert_audio": {
+        "title": "アラート音声設定",
+        "description": "READY→ALERTED 遷移時に TTS で通知します。最も早く雨が予測されるバケット (10/20/30/60 分後) の設定が使われます。プレースホルダ: {minutes}=このバケットの分数、{mm}=このバケットの予想 mm/h、{mm_10}/{mm_20}/{mm_30}/{mm_60}=各バケットの予想 mm/h、{first_min}=最初の降水までの分、{observed_mm}=現在の実況降水量。テスト再生は button.jma_nowcast_test_alert_XXmin を使用。",
+        "data": {
+          "alert_tts_entity":  "TTS エンティティ",
+          "alert_targets":     "対象デバイス (media_player, 複数選択可)",
+          "alert_10_enabled":  "10 分後のアラートを有効化",
+          "alert_10_message":  "10 分後メッセージ",
+          "alert_20_enabled":  "20 分後のアラートを有効化",
+          "alert_20_message":  "20 分後メッセージ",
+          "alert_30_enabled":  "30 分後のアラートを有効化",
+          "alert_30_message":  "30 分後メッセージ",
+          "alert_60_enabled":  "60 分後のアラートを有効化",
+          "alert_60_message":  "60 分後メッセージ"
+        },
+        "data_description": {
+          "alert_tts_entity": "使用する TTS エンティティ (tts.google_translate_XX など)。未設定の場合は発報しません",
+          "alert_targets":    "音声を再生するスピーカー (media_player エンティティ)。全バケット共通",
+          "alert_10_message": "例: 約10分後に{mm}ミリの雨が予想されています",
+          "alert_20_message": "例: 20分後には{mm}ミリに強まる予想です",
+          "alert_30_message": "例: 30分後には{mm}ミリの雨が続く見込みです",
+          "alert_60_message": "例: 60分後には止む予想です"
         }
       }
     }
@@ -89,7 +121,11 @@
       "forecast_60min":     { "name": "60分後" }
     },
     "button": {
-      "refresh": { "name": "今すぐ確認" }
+      "refresh":              { "name": "今すぐ確認" },
+      "test_alert_10min":     { "name": "テスト再生 (10分後)" },
+      "test_alert_20min":     { "name": "テスト再生 (20分後)" },
+      "test_alert_30min":     { "name": "テスト再生 (30分後)" },
+      "test_alert_60min":     { "name": "テスト再生 (60分後)" }
     },
     "camera": {
       "tile_x4":  { "name": "詳細" },

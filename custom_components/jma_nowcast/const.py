@@ -16,6 +16,20 @@ CONF_SCAN_INTERVAL         = "scan_interval"
 # 監視範囲タイル camera に JMA ピクセル格子をオーバーレイ描画するかどうか
 CONF_SHOW_GRID             = "show_grid"
 
+# ── Alert Audio (TTS) 設定 ────────────────────────────────────────────────
+# 発報時に TTS で読み上げる音声通知の設定。バケットごとに有効/メッセージを
+# 別々に指定できる。tts_entity と targets (media_player) は全バケット共通。
+CONF_ALERT_TTS_ENTITY      = "alert_tts_entity"
+CONF_ALERT_TARGETS         = "alert_targets"
+CONF_ALERT_10_ENABLED      = "alert_10_enabled"
+CONF_ALERT_10_MESSAGE      = "alert_10_message"
+CONF_ALERT_20_ENABLED      = "alert_20_enabled"
+CONF_ALERT_20_MESSAGE      = "alert_20_message"
+CONF_ALERT_30_ENABLED      = "alert_30_enabled"
+CONF_ALERT_30_MESSAGE      = "alert_30_message"
+CONF_ALERT_60_ENABLED      = "alert_60_enabled"
+CONF_ALERT_60_MESSAGE      = "alert_60_message"
+
 # フォーム専用キー（保存はされない）
 CONF_LOCATION         = "location"        # LocationSelector の返却 dict
 CONF_RESET_TO_HOME    = "reset_to_home"   # ボタン代わりのチェックボックス
@@ -33,6 +47,23 @@ DEFAULT_NO_RAIN_COOLDOWN_MIN  = 30   # 新規セットアップ時のデフォ�
 DEFAULT_POST_RAIN_COOLDOWN_MIN = 60  # 新規セットアップ時のデフォルト
 DEFAULT_SCAN_INTERVAL         = 5    # minutes
 DEFAULT_SHOW_GRID             = False
+# Alert audio デフォルト。バケットごとに文言を分ける。
+# プレースホルダ:
+#   {minutes}  ─ このバケットの分数 (10/20/30/60)
+#   {mm}       ─ このバケットの予想 mm/h (面平均)
+#   {mm_10} {mm_20} {mm_30} {mm_60} ─ 各バケットの予想 mm/h
+#   {first_min} ─ first_rain_in_minutes
+#   {observed_mm} ─ 現在の実況降水量
+DEFAULT_ALERT_TTS_ENTITY      = ""       # 空 = 未設定 (発報しない)
+DEFAULT_ALERT_TARGETS: list[str] = []    # 空 = 未設定 (発報しない)
+DEFAULT_ALERT_10_ENABLED      = False
+DEFAULT_ALERT_10_MESSAGE      = "約10分後に{mm}ミリ毎時の雨が降る予想です。"
+DEFAULT_ALERT_20_ENABLED      = False
+DEFAULT_ALERT_20_MESSAGE      = "約20分後に{mm}ミリ毎時の雨が降る予想です。"
+DEFAULT_ALERT_30_ENABLED      = False
+DEFAULT_ALERT_30_MESSAGE      = "約30分後に{mm}ミリ毎時の雨が降る予想です。"
+DEFAULT_ALERT_60_ENABLED      = False
+DEFAULT_ALERT_60_MESSAGE      = "約60分後に{mm}ミリ毎時の雨が降る予想です。"
 # v2→v3 マイグレーション時のクールダウン値（旧挙動を維持するため 0）
 MIGRATION_NO_RAIN_COOLDOWN_MIN  = 0
 MIGRATION_POST_RAIN_COOLDOWN_MIN = 0

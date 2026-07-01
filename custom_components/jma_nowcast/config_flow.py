@@ -10,6 +10,8 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     LocationSelector,
     LocationSelectorConfig,
     NumberSelector,
@@ -17,11 +19,24 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .const import (
     ALL_COVERAGE_OPTIONS,
     ALL_FORECAST_MINUTES,
+    CONF_ALERT_10_ENABLED,
+    CONF_ALERT_10_MESSAGE,
+    CONF_ALERT_20_ENABLED,
+    CONF_ALERT_20_MESSAGE,
+    CONF_ALERT_30_ENABLED,
+    CONF_ALERT_30_MESSAGE,
+    CONF_ALERT_60_ENABLED,
+    CONF_ALERT_60_MESSAGE,
+    CONF_ALERT_TARGETS,
+    CONF_ALERT_TTS_ENTITY,
     CONF_FORECAST_MINUTES,
     CONF_LATITUDE,
     CONF_LOCATION,
@@ -34,6 +49,16 @@ from .const import (
     CONF_SHOW_GRID,
     CONF_THRESHOLD_MM,
     CONF_TRIGGER_COVERAGE,
+    DEFAULT_ALERT_10_ENABLED,
+    DEFAULT_ALERT_10_MESSAGE,
+    DEFAULT_ALERT_20_ENABLED,
+    DEFAULT_ALERT_20_MESSAGE,
+    DEFAULT_ALERT_30_ENABLED,
+    DEFAULT_ALERT_30_MESSAGE,
+    DEFAULT_ALERT_60_ENABLED,
+    DEFAULT_ALERT_60_MESSAGE,
+    DEFAULT_ALERT_TARGETS,
+    DEFAULT_ALERT_TTS_ENTITY,
     DEFAULT_FORECAST_MINUTES,
     DEFAULT_NO_RAIN_COOLDOWN_MIN,
     DEFAULT_POST_RAIN_COOLDOWN_MIN,
@@ -50,7 +75,9 @@ from .const import (
 _MINUTE_OPTIONS = [str(m) for m in ALL_FORECAST_MINUTES]
 
 
-def _build_form_schema(
+# ── 基本設定フォーム (既存項目) ─────────────────────────────────────────
+
+def _build_basic_schema(
     *,
     default_location: dict[str, float],
     default_minutes: list[str],
@@ -62,7 +89,7 @@ def _build_form_schema(
     default_show_grid: bool,
     include_reset: bool,
 ) -> vol.Schema:
-    """ConfigFlow / OptionsFlow 共通のスキーマを組み立てる。"""
+    """ConfigFlow / OptionsFlow で共通に使う基本設定スキーマ。"""
     fields: dict = {
         vol.Required(CONF_LOCATION, default=default_location): LocationSelector(
             LocationSelectorConfig(radius=True)
@@ -110,16 +137,12 @@ def _build_form_schema(
     return vol.Schema(fields)
 
 
-def _split_user_input(
+def _split_basic_input(
     user_input: dict[str, Any],
     *,
     fallback_location: dict[str, float],
 ) -> dict[str, Any]:
-    """フォーム入力 → 保存用 dict に変換。
-
-    LocationSelector の返却 dict を lat/lon/radius_meters に分解する。
-    reset_to_home が True なら fallback_location で上書き。
-    """
+    """基本フォーム入力 → 保存用 dict。LocationSelector を分解。"""
     location = dict(user_input.get(CONF_LOCATION, fallback_location))
     if user_input.get(CONF_RESET_TO_HOME):
         location = dict(fallback_location)
@@ -140,6 +163,57 @@ def _split_user_input(
     }
 
 
+# ── アラート音声設定フォーム ───────────────────────────────────────────
+
+def _build_alert_audio_schema(
+    *,
+    tts_entity: str,
+    targets: list[str],
+    a10_enabled: bool, a10_msg: str,
+    a20_enabled: bool, a20_msg: str,
+    a30_enabled: bool, a30_msg: str,
+    a60_enabled: bool, a60_msg: str,
+) -> vol.Schema:
+    """TTS 発報のバケット別メッセージ設定スキーマ。"""
+    text_multiline = TextSelector(
+        TextSelectorConfig(multiline=True, type=TextSelectorType.TEXT)
+    )
+    return vol.Schema({
+        vol.Optional(CONF_ALERT_TTS_ENTITY, default=tts_entity): EntitySelector(
+            EntitySelectorConfig(domain="tts")
+        ),
+        vol.Optional(CONF_ALERT_TARGETS, default=targets): EntitySelector(
+            EntitySelectorConfig(domain="media_player", multiple=True)
+        ),
+        vol.Optional(CONF_ALERT_10_ENABLED, default=a10_enabled): BooleanSelector(),
+        vol.Optional(CONF_ALERT_10_MESSAGE, default=a10_msg): text_multiline,
+        vol.Optional(CONF_ALERT_20_ENABLED, default=a20_enabled): BooleanSelector(),
+        vol.Optional(CONF_ALERT_20_MESSAGE, default=a20_msg): text_multiline,
+        vol.Optional(CONF_ALERT_30_ENABLED, default=a30_enabled): BooleanSelector(),
+        vol.Optional(CONF_ALERT_30_MESSAGE, default=a30_msg): text_multiline,
+        vol.Optional(CONF_ALERT_60_ENABLED, default=a60_enabled): BooleanSelector(),
+        vol.Optional(CONF_ALERT_60_MESSAGE, default=a60_msg): text_multiline,
+    })
+
+
+def _split_alert_audio_input(user_input: dict[str, Any]) -> dict[str, Any]:
+    """アラート音声フォーム入力 → 保存用 dict。"""
+    return {
+        CONF_ALERT_TTS_ENTITY: str(user_input.get(CONF_ALERT_TTS_ENTITY, DEFAULT_ALERT_TTS_ENTITY) or ""),
+        CONF_ALERT_TARGETS:    list(user_input.get(CONF_ALERT_TARGETS, DEFAULT_ALERT_TARGETS) or []),
+        CONF_ALERT_10_ENABLED: bool(user_input.get(CONF_ALERT_10_ENABLED, DEFAULT_ALERT_10_ENABLED)),
+        CONF_ALERT_10_MESSAGE: str(user_input.get(CONF_ALERT_10_MESSAGE, DEFAULT_ALERT_10_MESSAGE) or ""),
+        CONF_ALERT_20_ENABLED: bool(user_input.get(CONF_ALERT_20_ENABLED, DEFAULT_ALERT_20_ENABLED)),
+        CONF_ALERT_20_MESSAGE: str(user_input.get(CONF_ALERT_20_MESSAGE, DEFAULT_ALERT_20_MESSAGE) or ""),
+        CONF_ALERT_30_ENABLED: bool(user_input.get(CONF_ALERT_30_ENABLED, DEFAULT_ALERT_30_ENABLED)),
+        CONF_ALERT_30_MESSAGE: str(user_input.get(CONF_ALERT_30_MESSAGE, DEFAULT_ALERT_30_MESSAGE) or ""),
+        CONF_ALERT_60_ENABLED: bool(user_input.get(CONF_ALERT_60_ENABLED, DEFAULT_ALERT_60_ENABLED)),
+        CONF_ALERT_60_MESSAGE: str(user_input.get(CONF_ALERT_60_MESSAGE, DEFAULT_ALERT_60_MESSAGE) or ""),
+    }
+
+
+# ── ConfigFlow (初回セットアップ) ─────────────────────────────────────
+
 class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
     """JMA Nowcast 初期セットアップフロー。"""
 
@@ -154,10 +228,12 @@ class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
         ha_location = self._ha_home_location()
 
         if user_input is not None:
-            stored = _split_user_input(user_input, fallback_location=ha_location)
+            stored = _split_basic_input(user_input, fallback_location=ha_location)
+            # 初回は alert 設定はデフォルトのまま (OFF) で登録し、後で
+            # OptionsFlow から編集してもらう方針。項目が多くなり過ぎない。
             return self.async_create_entry(title="JMA Nowcast", data=stored)
 
-        schema = _build_form_schema(
+        schema = _build_basic_schema(
             default_location=ha_location,
             default_minutes=[str(m) for m in DEFAULT_FORECAST_MINUTES],
             default_threshold=DEFAULT_THRESHOLD_MM,
@@ -183,13 +259,32 @@ class JmaNowcastConfigFlow(ConfigFlow, domain=DOMAIN):
         return JmaNowcastOptionsFlow(config_entry)
 
 
+# ── OptionsFlow (再設定) ──────────────────────────────────────────────
+
 class JmaNowcastOptionsFlow(OptionsFlow):
-    """セットアップ後の設定変更フロー。"""
+    """メニュー式の設定変更フロー。
+
+    - init: 「基本設定」「アラート音声設定」の 2 択メニュー
+    - basic: 監視位置・半径・発報条件・クールダウン等
+    - alert_audio: TTS + media_player + バケット別メッセージ
+
+    保存は各サブステップ完了時に既存 options とマージして create_entry する。
+    ユーザーが片方だけ変更してももう片方の設定が失われない。
+    """
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         self._config_entry = config_entry
 
     async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["basic", "alert_audio"],
+        )
+
+    # ── 基本設定サブステップ ──
+    async def async_step_basic(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         current = {**self._config_entry.data, **self._config_entry.options}
@@ -200,8 +295,9 @@ class JmaNowcastOptionsFlow(OptionsFlow):
         }
 
         if user_input is not None:
-            stored = _split_user_input(user_input, fallback_location=ha_location)
-            return self.async_create_entry(title="", data=stored)
+            new_basic = _split_basic_input(user_input, fallback_location=ha_location)
+            merged = self._merge_with_current(new_basic)
+            return self.async_create_entry(title="", data=merged)
 
         default_location = {
             "latitude":  float(current.get(CONF_LATITUDE,  ha_location["latitude"])),
@@ -211,7 +307,7 @@ class JmaNowcastOptionsFlow(OptionsFlow):
         default_minutes = [
             str(m) for m in current.get(CONF_FORECAST_MINUTES, DEFAULT_FORECAST_MINUTES)
         ]
-        schema = _build_form_schema(
+        schema = _build_basic_schema(
             default_location=default_location,
             default_minutes=default_minutes,
             default_threshold=float(current.get(CONF_THRESHOLD_MM, DEFAULT_THRESHOLD_MM)),
@@ -224,4 +320,35 @@ class JmaNowcastOptionsFlow(OptionsFlow):
             default_show_grid=bool(current.get(CONF_SHOW_GRID, DEFAULT_SHOW_GRID)),
             include_reset=True,
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="basic", data_schema=schema)
+
+    # ── アラート音声サブステップ ──
+    async def async_step_alert_audio(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        current = {**self._config_entry.data, **self._config_entry.options}
+
+        if user_input is not None:
+            new_alert = _split_alert_audio_input(user_input)
+            merged = self._merge_with_current(new_alert)
+            return self.async_create_entry(title="", data=merged)
+
+        schema = _build_alert_audio_schema(
+            tts_entity=str(current.get(CONF_ALERT_TTS_ENTITY, DEFAULT_ALERT_TTS_ENTITY) or ""),
+            targets=list(current.get(CONF_ALERT_TARGETS, DEFAULT_ALERT_TARGETS) or []),
+            a10_enabled=bool(current.get(CONF_ALERT_10_ENABLED, DEFAULT_ALERT_10_ENABLED)),
+            a10_msg=str(current.get(CONF_ALERT_10_MESSAGE, DEFAULT_ALERT_10_MESSAGE) or ""),
+            a20_enabled=bool(current.get(CONF_ALERT_20_ENABLED, DEFAULT_ALERT_20_ENABLED)),
+            a20_msg=str(current.get(CONF_ALERT_20_MESSAGE, DEFAULT_ALERT_20_MESSAGE) or ""),
+            a30_enabled=bool(current.get(CONF_ALERT_30_ENABLED, DEFAULT_ALERT_30_ENABLED)),
+            a30_msg=str(current.get(CONF_ALERT_30_MESSAGE, DEFAULT_ALERT_30_MESSAGE) or ""),
+            a60_enabled=bool(current.get(CONF_ALERT_60_ENABLED, DEFAULT_ALERT_60_ENABLED)),
+            a60_msg=str(current.get(CONF_ALERT_60_MESSAGE, DEFAULT_ALERT_60_MESSAGE) or ""),
+        )
+        return self.async_show_form(step_id="alert_audio", data_schema=schema)
+
+    # ── 内部ヘルパ ──
+    def _merge_with_current(self, new_partial: dict[str, Any]) -> dict[str, Any]:
+        """OptionsFlow の create_entry は options 全体を置換するため、
+        既存 options に new_partial を重ねて返す。"""
+        return {**self._config_entry.options, **new_partial}
