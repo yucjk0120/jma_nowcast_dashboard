@@ -48,12 +48,19 @@ DEFAULT_POST_RAIN_COOLDOWN_MIN = 60  # 新規セットアップ時のデフォ�
 DEFAULT_SCAN_INTERVAL         = 5    # minutes
 DEFAULT_SHOW_GRID             = False
 # Alert audio デフォルト。バケットごとに文言を分ける。
-# プレースホルダ:
-#   {minutes}  ─ このバケットの分数 (10/20/30/60)
-#   {mm}       ─ このバケットの予想 mm/h (面平均)
-#   {mm_10} {mm_20} {mm_30} {mm_60} ─ 各バケットの予想 mm/h
-#   {first_min} ─ first_rain_in_minutes
-#   {observed_mm} ─ 現在の実況降水量
+# テンプレートには次の 2 記法を使える (自動判定):
+#   単純置換 (str.format_map): {mm} など単一波かっこ
+#   Jinja2 (HA 標準):          {{mm}} や {% if rain_60 %}...{% endif %}
+# 提供される変数 (Jinja/format_map 両対応):
+#   minutes           ─ このバケットの分数 (10/20/30/60)
+#   mm                ─ このバケットの予想 mm/h (範囲内最大値、float)
+#   mm_10 mm_20 mm_30 mm_60 ─ 各バケットの予想 mm/h (float, 未計測=0.0)
+#   rain_10 rain_20 rain_30 rain_60 ─ 各バケットに雨あり判定 (bool)
+#   first_min         ─ first_rain_in_minutes (int)
+#   observed_mm       ─ 現在の実況降水量 (float)
+#   stops_at          ─ first_min 以降で最初に雨が止むバケット (int|None)
+#   still_raining_60  ─ 60 分後も雨が続くか (bool、= rain_60)
+#   test              ─ テスト再生かどうか (bool)
 DEFAULT_ALERT_TTS_ENTITY      = ""       # 空 = 未設定 (発報しない)
 DEFAULT_ALERT_TARGETS: list[str] = []    # 空 = 未設定 (発報しない)
 DEFAULT_ALERT_10_ENABLED      = False

@@ -68,7 +68,7 @@
       },
       "alert_audio": {
         "title": "Alert Audio",
-        "description": "Announce via TTS when the state machine transitions READY→ALERTED. The bucket message matching first_rain_in_minutes (10/20/30/60) is used. Placeholders: {minutes}=this bucket's minutes, {mm}=this bucket's forecast mm/h, {mm_10}/{mm_20}/{mm_30}/{mm_60}=each bucket's forecast mm/h, {first_min}=first rain in minutes, {observed_mm}=current observed mm/h. Use button.jma_nowcast_test_alert_XXmin to test playback.",
+        "description": "Announce via TTS on READY→ALERTED. Bucket matching first_rain_in_minutes (10/20/30/60) is used. Templates support both Jinja2 ({{mm_10}}, {% if rain_60 %}...{% endif %}) and simple substitution ({mm}). Variables: mm/mm_10/mm_20/mm_30/mm_60=each bucket's forecast mm/h (range max), rain_10..rain_60=has rain per bucket (bool), first_min=first rain in minutes, observed_mm=current observed mm/h, stops_at=first bucket after first_min where rain stops (int|None), still_raining_60=still raining at 60 min (bool), test=whether this is a test playback. Use button.jma_nowcast_test_alert_XXmin to test.",
         "data": {
           "alert_tts_entity":  "TTS entity",
           "alert_targets":     "Target devices (media_player, multiple)",

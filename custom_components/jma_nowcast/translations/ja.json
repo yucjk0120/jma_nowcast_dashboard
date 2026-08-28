@@ -68,7 +68,7 @@
       },
       "alert_audio": {
         "title": "アラート音声設定",
-        "description": "READY→ALERTED 遷移時に TTS で通知します。最も早く雨が予測されるバケット (10/20/30/60 分後) の設定が使われます。プレースホルダ: {minutes}=このバケットの分数、{mm}=このバケットの予想 mm/h、{mm_10}/{mm_20}/{mm_30}/{mm_60}=各バケットの予想 mm/h、{first_min}=最初の降水までの分、{observed_mm}=現在の実況降水量。テスト再生は button.jma_nowcast_test_alert_XXmin を使用。",
+        "description": "READY→ALERTED 遷移時に TTS で通知します。最も早く雨が予測されるバケット (10/20/30/60 分後) の設定が使われます。テンプレートは Jinja2 記法 ({{mm_10}}, {% if rain_60 %}...{% endif %}) と単純置換 ({mm}) の両方をサポート。変数: mm/mm_10/mm_20/mm_30/mm_60=各バケットの予想 mm/h (範囲内最大)、rain_10..rain_60=各バケットに雨あり (bool)、first_min=最初の降水までの分、observed_mm=現在の実況降水量、stops_at=first_min 以降で最初に雨が止むバケット (int|None)、still_raining_60=60 分後も雨が続くか (bool)、test=テスト再生か (bool)。テスト再生は button.jma_nowcast_test_alert_XXmin を使用。",
         "data": {
           "alert_tts_entity":  "TTS エンティティ",
           "alert_targets":     "対象デバイス (media_player, 複数選択可)",

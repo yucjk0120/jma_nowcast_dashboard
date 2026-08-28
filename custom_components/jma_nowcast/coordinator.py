@@ -104,19 +104,19 @@ def _sync_check_tile(
     """タイル画像を解析。
 
     戻り値:
-        (triggered, avg_mm, coverage_ratio_observed)
+        (triggered, max_mm, coverage_ratio_observed)
 
     - triggered: 設定された coverage 基準を満たしたか (発報用)
-    - avg_mm:    範囲内の有効ピクセル (alpha>=50) の **平均** 降水強度。
-                 0mm/h ピクセル (晴) も含めて平均するので、範囲全体の
-                 「面平均の雨量」を反映する。最大強度ではない。
+    - max_mm:    範囲内の有効ピクセル (alpha>=50) の **最大** 降水強度。
+                 「今このエリアで一番強く降っている / 降る予測の値」を返す。
+                 面平均ではなくピーク値なので、局所豪雨も拾いやすい。
     - coverage_ratio_observed: 範囲内のうち閾値以上だったピクセル比率。
     """
     img = Image.open(BytesIO(img_bytes)).convert("RGBA")
     pixels = img.load()
     w, h = img.size
 
-    sum_mm = 0.0
+    max_mm = 0.0
     wet = 0
     total = 0
 
@@ -129,7 +129,8 @@ def _sync_check_tile(
                     continue
                 total += 1
                 mm = rgb_to_intensity(red, grn, blu)
-                sum_mm += mm
+                if mm > max_mm:
+                    max_mm = mm
                 if mm >= threshold_mm:
                     wet += 1
 
@@ -137,14 +138,13 @@ def _sync_check_tile(
         return False, 0.0, 0.0
 
     ratio = wet / total
-    avg_mm = sum_mm / total
 
     if coverage_preset == COVERAGE_ANY:
         triggered = wet > 0
     else:
         triggered = ratio >= coverage_ratio
 
-    return triggered, round(avg_mm, 1), round(ratio, 3)
+    return triggered, round(max_mm, 1), round(ratio, 3)
 
 
 # ── コーディネーター ───────────────────────────────────────────────────────
@@ -406,46 +406,101 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return f"?{key}?"
 
     def _placeholders_for(self, minutes: int, is_test: bool) -> dict[str, Any]:
-        """メッセージテンプレートに差し込むプレースホルダ dict を作る。"""
+        """メッセージテンプレートに差し込むプレースホルダ dict を作る。
+
+        数値は float / bool として提供する (Jinja の {% if %} 条件で
+        比較しやすくするため)。旧 str.format_map 記法でも str() 経由で
+        自然に描画される。
+        """
         data = self.data or {}
         forecasts = data.get("forecasts", {}) if isinstance(data, dict) else {}
 
-        def _mm(key: int) -> str:
+        def _mm(key: int) -> float:
             info = forecasts.get(key) or {}
             v = info.get("mm")
-            return f"{float(v):.1f}" if isinstance(v, (int, float)) else "-"
+            return round(float(v), 1) if isinstance(v, (int, float)) else 0.0
 
-        this_mm = _mm(minutes)
+        def _rain(key: int) -> bool:
+            info = forecasts.get(key) or {}
+            return bool(info.get("rain", False))
+
+        first_min_raw = (
+            data.get("first_rain_in_minutes") if isinstance(data, dict) else None
+        )
+        first_min = first_min_raw if first_min_raw is not None else minutes
+
+        # first_min 以降で最初に「雨が止む」バケット。無ければ None。
+        stops_at: int | None = None
+        for m in (10, 20, 30, 60):
+            if m > first_min and not _rain(m):
+                stops_at = m
+                break
+
+        observed_raw = (
+            data.get("observed_mm") if isinstance(data, dict) else None
+        )
+        observed_mm = (
+            round(float(observed_raw), 1)
+            if isinstance(observed_raw, (int, float)) else 0.0
+        )
+
         return {
-            "minutes":     minutes,
-            "mm":          this_mm,
-            "mm_10":       _mm(10),
-            "mm_20":       _mm(20),
-            "mm_30":       _mm(30),
-            "mm_60":       _mm(60),
-            "first_min":   (data.get("first_rain_in_minutes") if isinstance(data, dict) else None) or minutes,
-            "observed_mm": (
-                f"{float(data.get('observed_mm', 0.0)):.1f}"
-                if isinstance(data, dict) and data.get("observed_mm") is not None
-                else "0.0"
-            ),
-            "test":        "（テスト）" if is_test else "",
+            "minutes":          minutes,
+            "mm":               _mm(minutes),
+            "mm_10":            _mm(10),
+            "mm_20":            _mm(20),
+            "mm_30":            _mm(30),
+            "mm_60":            _mm(60),
+            "rain_10":          _rain(10),
+            "rain_20":          _rain(20),
+            "rain_30":          _rain(30),
+            "rain_60":          _rain(60),
+            "first_min":        first_min,
+            "observed_mm":      observed_mm,
+            "stops_at":         stops_at,
+            "still_raining_60": _rain(60),
+            "test":             is_test,
         }
 
     def _render_alert_message(self, minutes: int, is_test: bool) -> str | None:
-        """バケットのテンプレートをプレースホルダで埋めた文字列を返す。
-        未設定/空なら None。テスト時は空でも「テストです」を返す。"""
+        """バケットのテンプレートを埋めた文字列を返す。
+
+        テンプレートに `{{` または `{%` が含まれれば **Jinja2** として
+        評価する (HA 標準の Template クラス。{% if %} 等の条件分岐可)。
+        そうでなければ従来の str.format_map スタイル (単一 {key})。
+
+        - 未設定/空 かつ非テスト → None
+        - 未設定/空 かつテスト   → 既定文言「N分後アラートのテスト再生です。」
+        - レンダリング失敗       → テンプレート原文をそのまま返し WARN を残す
+        """
         cfg = self.alert_configs.get(minutes)
         template = cfg[1] if cfg else ""
         if not template and not is_test:
             return None
         if not template and is_test:
             template = f"{minutes}分後アラートのテスト再生です。"
+
         ph = self._placeholders_for(minutes, is_test)
+
+        if "{{" in template or "{%" in template:
+            # 遅延 import: helpers.template は HA コアに含まれるが、
+            # 単体テスト等では import できないケースがあるため。
+            try:
+                from homeassistant.helpers.template import Template
+                tpl = Template(template, self.hass)
+                return tpl.async_render(ph, parse_result=False)
+            except Exception as exc:  # noqa: BLE001 — Jinja は多種例外を投げる
+                _LOGGER.warning(
+                    "Jinja render failed (bucket=%s): %s", minutes, exc
+                )
+                return template
+
         try:
             return template.format_map(self._SafePlaceholders(ph))
         except (ValueError, IndexError) as exc:
-            _LOGGER.warning("Alert message template error (bucket=%s): %s", minutes, exc)
+            _LOGGER.warning(
+                "format_map failed (bucket=%s): %s", minutes, exc
+            )
             return template
 
     async def async_play_alert(self, minutes: int, *, is_test: bool = False) -> None:

@@ -25,12 +25,12 @@
 | `binary_sensor.jma_nowcast_rain_detected` | Binary Sensor | **降水アラート** — **発報中** / **待機中** の2状態。ステートマシン (v1.2+) が管理（詳細は下記） |
 | `sensor.jma_nowcast_alert_state` | Sensor (enum) | 状態機械の現在値: `ready` / `alerted` / `raining` / `post_rain_wait` |
 | `sensor.jma_nowcast_first_rain_minutes` | Sensor | **降水予測** (単位: 分後) — 設定で有効な「監視する分後」のうち、最も近く降水が予測される時刻。UI は「20 分後」と表示。`states()` は値のみ (例: `"20"`) を返す。雨予報なしは `unknown` |
-| `sensor.jma_nowcast_rain_observed_mm` | Sensor | **実況降水量** (mm/h) — JMA 実況タイル (N1) から算出した監視範囲内ピクセルの**面平均** |
+| `sensor.jma_nowcast_rain_observed_mm` | Sensor | **実況降水量** (mm/h) — JMA 実況タイル (N1) から算出した監視範囲内ピクセルの**最大値** |
 | `sensor.jma_nowcast_summary` | Sensor | 予報サマリー文字列 |
-| `sensor.jma_nowcast_10min` | Sensor | 10分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
-| `sensor.jma_nowcast_20min` | Sensor | 20分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
-| `sensor.jma_nowcast_30min` | Sensor | 30分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
-| `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**面平均** |
+| `sensor.jma_nowcast_10min` | Sensor | 10分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**最大値**（ピーク） |
+| `sensor.jma_nowcast_20min` | Sensor | 20分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**最大値**（ピーク） |
+| `sensor.jma_nowcast_30min` | Sensor | 30分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**最大値**（ピーク） |
+| `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**最大値**（ピーク） |
 | `button.jma_nowcast_refresh` | Button | 今すぐ確認（手動更新） |
 | `button.jma_nowcast_test_alert_10min` 〜 `_60min` | Button (config) | アラート音声のテスト再生。各バケット用に 4 個。EntityCategory.CONFIG で分離 |
 | `camera.jma_nowcast_tile_x4`  | Camera | **詳細** — 監視円が画像幅の **1/4** （最ズームイン、1024×1024 px） |
@@ -71,22 +71,52 @@ v1.5.0 以降、**設定 → デバイスとサービス → JMA Nowcast → 設
 「一番早く雨が予測されているバケットの文言」が読み上げられます。
 つまり `first_rain_in_minutes` が 20 なら「20 分後」の文言が使われます。
 
-### メッセージテンプレートで使えるプレースホルダ
+### テンプレート記法
 
-| プレースホルダ | 内容 |
-|---|---|
-| `{minutes}` | このバケットの分数 (10 / 20 / 30 / 60) |
-| `{mm}` | このバケットの予想 mm/h (監視範囲内ピクセルの面平均) |
-| `{mm_10}` / `{mm_20}` / `{mm_30}` / `{mm_60}` | 各バケットの予想 mm/h |
-| `{first_min}` | `sensor.jma_nowcast_first_rain_minutes` と同じ値 |
-| `{observed_mm}` | 現在の実況降水量 (mm/h) |
+メッセージは 2 通りの書き方に対応します（テンプレート内容から**自動判定**）:
 
-例:
+- **単純置換** — `{mm}` のような単一波かっこ。従来通り。
+- **Jinja2** — `{{mm}}` / `{% if ... %}` を含む場合は HA 標準の Jinja2 として評価。**条件分岐や複数バケットの参照が可能**。
+
+### メッセージで使える変数
+
+| 変数 | 型 | 内容 |
+|---|---|---|
+| `minutes` | int | このバケットの分数 (10 / 20 / 30 / 60) |
+| `mm` | float | このバケットの予想 mm/h（監視範囲内ピクセルの最大値） |
+| `mm_10` `mm_20` `mm_30` `mm_60` | float | 各バケットの予想 mm/h（未計測は `0.0`） |
+| `rain_10` `rain_20` `rain_30` `rain_60` | bool | 各バケットに雨あり判定 |
+| `first_min` | int | `sensor.jma_nowcast_first_rain_minutes` と同じ値 |
+| `observed_mm` | float | 現在の実況降水量 (mm/h) |
+| `stops_at` | int \| None | `first_min` より後で最初に雨が止むバケット (10/20/30/60)。ずっと降り続ける場合 `None` |
+| `still_raining_60` | bool | 60 分後も雨が続くか（= `rain_60`） |
+| `test` | bool | テスト再生かどうか |
+
+### シンプルな例（単純置換）
 
 ```
 10 分後メッセージ: 約10分後に{mm_10}ミリの雨が降る予想です。
 20 分後メッセージ: 20分後には{mm_20}ミリに強まる見込みです。
 60 分後メッセージ: 約1時間後に雨が予想されています。現在の降水量は{observed_mm}ミリです。
+```
+
+### 条件分岐を使う例（Jinja2）
+
+10 分後メッセージで、20/30 分後の予測にも触れ、60 分後の状態で結びを変える:
+
+```jinja
+10分後に{{mm_10}}ミリの雨が予想されます。
+{% if rain_20 %}20分後には{{mm_20}}ミリ、{% endif %}
+{% if rain_30 %}30分後には{{mm_30}}ミリ。{% endif %}
+{% if stops_at %}約{{stops_at}}分後に止む見込みです。
+{% elif still_raining_60 %}1時間後も降り続く見込みです。
+{% endif %}
+```
+
+現在の実況と絡めた例:
+
+```jinja
+現在{{observed_mm}}ミリ毎時。{% if mm_60 > mm_10 %}この後さらに強まり60分後には{{mm_60}}ミリ毎時になる予想です。{% else %}この後は弱まっていく見込みです。{% endif %}
 ```
 
 ### テスト再生
