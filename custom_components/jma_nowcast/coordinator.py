@@ -343,14 +343,27 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # → tile_x4_XXmin camera が forecast_minutes に含まれない
                 #    バケットでも画像を表示できるように。analysis は forecast_minutes
                 #    に絞るのは従来通り。
+                #
+                # ターゲット時刻は wall-clock now ではなく **N2 basetime + N min**
+                # で計算する。JMA の N2 予報は basetime から 5 分刻みに +5..+60
+                # のエントリを提供しているので、N2 basetime を基準にした方が:
+                #  - 5 分刻みエントリと完全一致し、ズレなく確定的に選べる
+                #  - 「10 分後」ラベルの意味が「予報基準時刻 + 10 分」で明確
+                #  - coordinator の更新間隔 (5 分) の間ずっと同じ entry を返し
+                #    安定 (wall-clock だと 5 分経つと +10 → +5 のエントリに切替)
                 new_snapshots: dict[int, tuple[str, str, datetime]] = {}
-                for mins in (10, 20, 30, 60):
-                    entry = _find_best_entry(now + timedelta(minutes=mins), entries_n2)
-                    if entry is None:
-                        continue
-                    bt = entry.get("basetime", entry["validtime"])
-                    vt = entry["validtime"]
-                    new_snapshots[mins] = (bt, vt, _parse_jma_dt(vt))
+                if entries_n2:
+                    n2_base_str = entries_n2[0].get("basetime")
+                    if n2_base_str:
+                        n2_base_dt = _parse_jma_dt(n2_base_str)
+                        for mins in (10, 20, 30, 60):
+                            target = n2_base_dt + timedelta(minutes=mins)
+                            entry = _find_best_entry(target, entries_n2)
+                            if entry is None:
+                                continue
+                            bt = entry.get("basetime", entry["validtime"])
+                            vt = entry["validtime"]
+                            new_snapshots[mins] = (bt, vt, _parse_jma_dt(vt))
                 if new_snapshots:
                     self.latest_forecast_snapshots = new_snapshots
 
