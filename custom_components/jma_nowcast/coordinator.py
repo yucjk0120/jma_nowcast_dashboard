@@ -33,6 +33,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 JST = timezone(timedelta(hours=9))
+UTC = timezone.utc
 
 # 地球の赤道周長 (m)。Web Mercator のピクセル解像度計算に使う。
 _EARTH_CIRCUMFERENCE_M = 40_075_016.686
@@ -77,7 +78,20 @@ def rgb_to_intensity(r: int, g: int, b: int) -> float:
 # ── JMA 時刻ユーティリティ ────────────────────────────────────────────────
 
 def _parse_jma_dt(s: str) -> datetime:
-    return datetime.strptime(s[:14], "%Y%m%d%H%M%S").replace(tzinfo=JST)
+    """JMA API のタイムスタンプ (YYYYMMDDHHMMSS) を JST-aware datetime に変換。
+
+    重要: JMA の bosai API は文字列上ローカル無指定だが **実体は UTC** で
+    ある。以前は素朴に JST として tzinfo を付けており、_find_best_entry の
+    比較で 9 時間ぶんズレて常に「一番未来寄りの (=+60min) エントリ」を
+    掴んでしまう潜在バグがあった (obs だけは entries_n1[0] を直参照する
+    ので影響を受けなかった)。ここで UTC → JST に正しく変換することで、
+    downstream の strftime/isoformat が JST 表示になる従来挙動も維持する。
+    """
+    return (
+        datetime.strptime(s[:14], "%Y%m%d%H%M%S")
+        .replace(tzinfo=UTC)
+        .astimezone(JST)
+    )
 
 
 def _find_best_entry(target_dt: datetime, entries: list[dict]) -> dict | None:
