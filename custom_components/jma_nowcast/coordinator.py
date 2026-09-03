@@ -1,6 +1,7 @@
 """JMA Nowcast data coordinator."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 from datetime import datetime, timedelta, timezone
