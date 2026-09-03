@@ -33,10 +33,14 @@
 | `sensor.jma_nowcast_60min` | Sensor | 60分後の予測降水量 (mm/h) — 監視範囲内ピクセルの**最大値**（ピーク） |
 | `button.jma_nowcast_refresh` | Button | 今すぐ確認（手動更新） |
 | `button.jma_nowcast_test_alert_10min` 〜 `_60min` | Button (config) | アラート音声のテスト再生。各バケット用に 4 個。EntityCategory.CONFIG で分離 |
-| `camera.jma_nowcast_tile_x4`  | Camera | **詳細** — 監視円が画像幅の **1/4** （最ズームイン、1024×1024 px） |
-| `camera.jma_nowcast_tile_x8`  | Camera | **中域** — 監視円が画像幅の **1/8** |
-| `camera.jma_nowcast_tile_x16` | Camera | **広域** — 監視円が画像幅の **1/16** |
-| `camera.jma_nowcast_tile_x32` | Camera | **超広域** — 監視円が画像幅の **1/32**（最ズームアウト） |
+| `camera.jma_nowcast_tile_x4`  | Camera | **詳細** — 実況 (現在の雨) 、監視円が画像幅の **1/4** （最ズームイン、1024×1024 px） |
+| `camera.jma_nowcast_tile_x4_10min` | Camera | **詳細 10分後** — 10 分後の予報スナップショット |
+| `camera.jma_nowcast_tile_x4_20min` | Camera | **詳細 20分後** — 20 分後の予報スナップショット |
+| `camera.jma_nowcast_tile_x4_30min` | Camera | **詳細 30分後** — 30 分後の予報スナップショット |
+| `camera.jma_nowcast_tile_x4_60min` | Camera | **詳細 60分後** — 60 分後の予報スナップショット |
+| `camera.jma_nowcast_tile_x8`  | Camera | **中域** (実況のみ) — 監視円が画像幅の **1/8** |
+| `camera.jma_nowcast_tile_x16` | Camera | **広域** (実況のみ) — 監視円が画像幅の **1/16** |
+| `camera.jma_nowcast_tile_x32` | Camera | **超広域** (実況のみ) — 監視円が画像幅の **1/32**（最ズームアウト） |
 
 ## インストール
 

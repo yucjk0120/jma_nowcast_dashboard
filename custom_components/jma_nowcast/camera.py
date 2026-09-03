@@ -465,10 +465,17 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: JmaNowcastCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        JmaNowcastScaledTileCamera(coordinator, entry, scale)
-        for scale in TILE_CAMERA_SCALES
-    )
+    entities: list[Camera] = []
+    for scale in TILE_CAMERA_SCALES:
+        # 実況カメラは全スケール分作る (既存挙動)
+        entities.append(JmaNowcastScaledTileCamera(coordinator, entry, scale))
+        # 詳細スケール (×4) のみ、予報カメラ 4 枚を追加
+        if scale == 4:
+            for minutes in (10, 20, 30, 60):
+                entities.append(JmaNowcastScaledTileCamera(
+                    coordinator, entry, scale, forecast_minutes=minutes,
+                ))
+    async_add_entities(entities)
 
 
 class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
@@ -492,13 +499,28 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
         coordinator: JmaNowcastCoordinator,
         entry: ConfigEntry,
         scale: int,
+        *,
+        forecast_minutes: int | None = None,
     ) -> None:
+        """
+        forecast_minutes:
+          - None → JMA 実況 (N1 相当) のスナップショットを表示
+          - int  → その分後の予報スナップショットを表示 (10/20/30/60)
+        """
         Camera.__init__(self)
         JmaNowcastEntity.__init__(self, coordinator, entry)
         self._scale = scale
-        self._attr_translation_key = f"tile_x{scale}"
-        self._attr_unique_id = f"{entry.entry_id}_tile_x{scale}"
-        self._attr_model = f"HRPNS tile ×{scale}"
+        self._forecast_minutes = forecast_minutes
+        suffix = f"_{forecast_minutes}min" if forecast_minutes is not None else ""
+        self._attr_translation_key = f"tile_x{scale}{suffix}"
+        self._attr_unique_id = f"{entry.entry_id}_tile_x{scale}{suffix}"
+        self._attr_model = (
+            f"HRPNS tile ×{scale} +{forecast_minutes}min"
+            if forecast_minutes is not None
+            else f"HRPNS tile ×{scale}"
+        )
+        if forecast_minutes is not None:
+            self._attr_icon = "mdi:map-clock-outline"
         # 直近の合成結果をキャッシュ (coordinator 更新で破棄)。
         self._cached_png: bytes | None = None
         self._cache_token: tuple | None = None
@@ -510,17 +532,35 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
         self._cache_token = None
         super()._handle_coordinator_update()
 
+    def _snapshot(self) -> tuple[str | None, str | None]:
+        """このカメラが描画する (basetime, validtime) を返す。
+
+        forecast_minutes=None → 実況、int → 予報スナップショット。
+        取得済みでない場合は (None, None) を返す (オーバーレイなし)。
+        """
+        coord = self.coordinator
+        if self._forecast_minutes is None:
+            return (
+                coord.latest_observation_basetime,
+                coord.latest_observation_validtime,
+            )
+        snap = coord.latest_forecast_snapshots.get(self._forecast_minutes)
+        if snap is None:
+            return (None, None)
+        return (snap[0], snap[1])
+
     async def async_camera_image(
         self,
         width: int | None = None,
         height: int | None = None,
     ) -> bytes | None:
         coord = self.coordinator
+        basetime, validtime = self._snapshot()
         token = (
             coord.lat, coord.lon, coord.radius_meters,
-            coord.latest_observation_basetime,
-            coord.latest_observation_validtime,
+            basetime, validtime,
             coord.show_grid,
+            self._forecast_minutes,
         )
         if self._cache_token == token and self._cached_png is not None:
             return self._cached_png
@@ -602,8 +642,7 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
                 _gsi_save_to_disk, cache_root, new_entries,
             )
 
-        basetime  = coord.latest_observation_basetime
-        validtime = coord.latest_observation_validtime
+        basetime, validtime = self._snapshot()
         overlay_tiles: dict | None = None
         if basetime and validtime:
             overlay_tiles = await _fetch_grid(
@@ -635,15 +674,22 @@ class JmaNowcastScaledTileCamera(JmaNowcastEntity, Camera):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         coord = self.coordinator
+        # forecast カメラなら snapshot の validtime を返す
+        if self._forecast_minutes is not None:
+            snap = coord.latest_forecast_snapshots.get(self._forecast_minutes)
+            snapshot_at = snap[2].isoformat() if snap else None
+        else:
+            snapshot_at = (
+                coord.latest_observation_at.isoformat()
+                if coord.latest_observation_at else None
+            )
         return {
             "scale":                    self._scale,
+            "forecast_minutes":         self._forecast_minutes,  # None = 実況
             "circle_fraction_of_width": f"1/{self._scale}",
             "image_extent_m":           2 * self._scale * coord.radius_meters,
             "image_resolution_px":      TILE_CAMERA_OUTPUT_PX,
-            "observed_at": (
-                coord.latest_observation_at.isoformat()
-                if coord.latest_observation_at else None
-            ),
+            "snapshot_at":              snapshot_at,
             "center_lat":               coord.lat,
             "center_lon":               coord.lon,
             "radius_m":                 coord.radius_meters,

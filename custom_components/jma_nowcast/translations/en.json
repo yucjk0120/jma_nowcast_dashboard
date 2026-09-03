@@ -128,10 +128,14 @@
       "test_alert_60min":     { "name": "Test Alert (60 min)" }
     },
     "camera": {
-      "tile_x4":  { "name": "Detail" },
-      "tile_x8":  { "name": "Medium" },
-      "tile_x16": { "name": "Wide" },
-      "tile_x32": { "name": "Extra Wide" }
+      "tile_x4":        { "name": "Detail" },
+      "tile_x4_10min":  { "name": "Detail (in 10 min)" },
+      "tile_x4_20min":  { "name": "Detail (in 20 min)" },
+      "tile_x4_30min":  { "name": "Detail (in 30 min)" },
+      "tile_x4_60min":  { "name": "Detail (in 60 min)" },
+      "tile_x8":        { "name": "Medium" },
+      "tile_x16":       { "name": "Wide" },
+      "tile_x32":       { "name": "Extra Wide" }
     }
   },
   "selector": {

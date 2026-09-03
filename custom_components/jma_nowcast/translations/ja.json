@@ -128,10 +128,14 @@
       "test_alert_60min":     { "name": "テスト再生 (60分後)" }
     },
     "camera": {
-      "tile_x4":  { "name": "詳細" },
-      "tile_x8":  { "name": "中域" },
-      "tile_x16": { "name": "広域" },
-      "tile_x32": { "name": "超広域" }
+      "tile_x4":        { "name": "詳細" },
+      "tile_x4_10min":  { "name": "詳細 10分後" },
+      "tile_x4_20min":  { "name": "詳細 20分後" },
+      "tile_x4_30min":  { "name": "詳細 30分後" },
+      "tile_x4_60min":  { "name": "詳細 60分後" },
+      "tile_x8":        { "name": "中域" },
+      "tile_x16":       { "name": "広域" },
+      "tile_x32":       { "name": "超広域" }
     }
   },
   "selector": {

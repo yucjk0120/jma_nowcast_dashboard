@@ -207,6 +207,10 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # 監視範囲タイル camera 用: 同じ basetime/validtime で広域タイルを再取得する
         self.latest_observation_basetime:  str | None = None
         self.latest_observation_validtime: str | None = None
+        # 予報タイル用: バケット分 (10/20/30/60) → (basetime, validtime, target_dt)。
+        # analysis は forecast_minutes に絞るが、camera 表示は forecast_minutes に
+        # 関わらず 4 バケット全部持っておくことで tile_x4_XXmin が常に描画できる。
+        self.latest_forecast_snapshots: dict[int, tuple[str, str, datetime]] = {}
 
         _LOGGER.debug(
             "Coordinator init: tile=%s/%s/%s px=%s,%s radius=%sm (%spx) coverage=%s cooldowns=%s/%s min",
@@ -321,18 +325,32 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     ),
                 }
 
-                # ② 各予報時刻のタイルを取得・解析
-                for mins in sorted(self.forecast_minutes):
+                # ②-a 全 4 バケットの (basetime, validtime) を先に確定させておく
+                # → tile_x4_XXmin camera が forecast_minutes に含まれない
+                #    バケットでも画像を表示できるように。analysis は forecast_minutes
+                #    に絞るのは従来通り。
+                new_snapshots: dict[int, tuple[str, str, datetime]] = {}
+                for mins in (10, 20, 30, 60):
                     entry = _find_best_entry(now + timedelta(minutes=mins), entries_n2)
                     if entry is None:
+                        continue
+                    bt = entry.get("basetime", entry["validtime"])
+                    vt = entry["validtime"]
+                    new_snapshots[mins] = (bt, vt, _parse_jma_dt(vt))
+                if new_snapshots:
+                    self.latest_forecast_snapshots = new_snapshots
+
+                # ②-b 各予報時刻のタイルを取得・解析 (forecast_minutes のみ)
+                for mins in sorted(self.forecast_minutes):
+                    snap = self.latest_forecast_snapshots.get(mins)
+                    if snap is None:
                         result["forecasts"][mins] = {
                             "rain": False, "mm": 0.0, "coverage": 0.0,
                             "error": "no_data",
                         }
                         continue
 
-                    basetime  = entry.get("basetime", entry["validtime"])
-                    validtime = entry["validtime"]
+                    basetime, validtime, vt_dt = snap
                     checked = await self._fetch_and_check_tile(session, basetime, validtime)
                     if checked is None:
                         result["forecasts"][mins] = {
@@ -341,7 +359,6 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         }
                         continue
                     has_rain, intensity, coverage_ratio = checked
-                    vt_dt = _parse_jma_dt(validtime)
                     result["forecasts"][mins] = {
                         "rain":          has_rain,
                         "mm":            intensity,
