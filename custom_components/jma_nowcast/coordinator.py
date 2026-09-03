@@ -106,37 +106,50 @@ def _find_best_entry(target_dt: datetime, entries: list[dict]) -> dict | None:
 
 # ── PIL 処理（同期・Executor で実行） ────────────────────────────────────
 
-def _sync_check_tile(
-    img_bytes: bytes,
-    px: int,
-    py: int,
+def _sync_check_tile_grid(
+    tiles_data: dict[tuple[int, int], bytes | None],
+    tx0: int, ty0: int, n_tiles_x: int, n_tiles_y: int,
+    center_gx: int, center_gy: int,
     radius_px: int,
     threshold_mm: float,
     coverage_ratio: float,
     coverage_preset: str,
 ) -> tuple[bool, float, float]:
-    """タイル画像を解析。
+    """複数タイルを合成した画像に対して発報判定＋強度算出を行う。
 
-    戻り値:
-        (triggered, max_mm, coverage_ratio_observed)
+    tiles_data: (tx, ty) → PNG bytes | None
+    tx0, ty0, n_tiles_x, n_tiles_y: 合成グリッドの左上タイルとサイズ
+    center_gx, center_gy: 監視位置のグローバルピクセル座標
+      (= tile_x * 256 + px, tile_y * 256 + py)
 
-    - triggered: 設定された coverage 基準を満たしたか (発報用)
-    - max_mm:    範囲内の有効ピクセル (alpha>=50) の **最大** 降水強度。
-                 「今このエリアで一番強く降っている / 降る予測の値」を返す。
-                 面平均ではなくピーク値なので、局所豪雨も拾いやすい。
-    - coverage_ratio_observed: 範囲内のうち閾値以上だったピクセル比率。
+    半径矩形がタイル境界を跨いでいても、必要なタイル全部を渡せば
+    正しく評価される (v1.5.4 以前の単一タイル方式ではエッジで欠落した)。
     """
-    img = Image.open(BytesIO(img_bytes)).convert("RGBA")
-    pixels = img.load()
-    w, h = img.size
+    stitched_w = n_tiles_x * 256
+    stitched_h = n_tiles_y * 256
+    canvas = Image.new("RGBA", (stitched_w, stitched_h), (255, 255, 255, 0))
+    for (tx, ty), data in tiles_data.items():
+        if data is None:
+            continue
+        try:
+            tile = Image.open(BytesIO(data)).convert("RGBA")
+        except Exception as exc:  # noqa: BLE001 — PIL の例外は多種
+            _LOGGER.debug("analysis tile decode failed (%s,%s): %s", tx, ty, exc)
+            continue
+        canvas.paste(tile, ((tx - tx0) * 256, (ty - ty0) * 256), tile)
+
+    pixels = canvas.load()
+    w, h = canvas.size
+    # 監視位置の合成画像内相対座標
+    cx = center_gx - tx0 * 256
+    cy = center_gy - ty0 * 256
 
     max_mm = 0.0
     wet = 0
     total = 0
-
     for dy in range(-radius_px, radius_px + 1):
         for dx in range(-radius_px, radius_px + 1):
-            ppx, ppy = px + dx, py + dy
+            ppx, ppy = cx + dx, cy + dy
             if 0 <= ppx < w and 0 <= ppy < h:
                 red, grn, blu, alpha = pixels[ppx, ppy]
                 if alpha < 50:
@@ -152,7 +165,6 @@ def _sync_check_tile(
         return False, 0.0, 0.0
 
     ratio = wet / total
-
     if coverage_preset == COVERAGE_ANY:
         triggered = wet > 0
     else:
@@ -246,10 +258,15 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         session: aiohttp.ClientSession,
         basetime: str,
         validtime: str,
+        tx: int | None = None,
+        ty: int | None = None,
     ) -> bytes | None:
+        """z=ZOOM で 1 タイル取得。tx/ty 省略時は監視位置を含むタイル。"""
+        if tx is None: tx = self._tile_x
+        if ty is None: ty = self._tile_y
         url = JMA_TILE_URL.format(
             basetime=basetime, validtime=validtime,
-            z=ZOOM, x=self._tile_x, y=self._tile_y,
+            z=ZOOM, x=tx, y=ty,
         )
         try:
             async with session.get(url) as tr:
@@ -259,16 +276,21 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("Tile fetch failed (%s): %s", url, exc)
             return None
 
-    async def _analyze_tile(self, img_bytes: bytes) -> tuple[bool, float, float]:
-        return await self.hass.async_add_executor_job(
-            _sync_check_tile,
-            img_bytes,
-            self._px, self._py,
-            self._radius_pixels,
-            self.threshold_mm,
-            self._coverage_ratio,
-            self.trigger_coverage,
-        )
+    def _analysis_tile_range(self) -> tuple[int, int, int, int]:
+        """半径 (radius_px) を覆うのに必要なタイル範囲 (tx0, ty0, tx1, ty1)。
+
+        監視位置のグローバル px からラジアス分だけ広げた矩形をタイル整数
+        座標に丸めた結果。半径がタイル境界を跨いでも取りこぼしなく解析
+        できるように、必要枚数分すべて取得する。
+        """
+        r = self._radius_pixels
+        gx = self._tile_x * 256 + self._px
+        gy = self._tile_y * 256 + self._py
+        tx0 = (gx - r) // 256
+        ty0 = (gy - r) // 256
+        tx1 = (gx + r) // 256
+        ty1 = (gy + r) // 256
+        return tx0, ty0, tx1, ty1
 
     async def _fetch_and_check_tile(
         self,
@@ -276,10 +298,41 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         basetime: str,
         validtime: str,
     ) -> tuple[bool, float, float] | None:
-        img_bytes = await self._fetch_tile_bytes(session, basetime, validtime)
-        if img_bytes is None:
+        """半径を覆うタイルグリッドを並列取得 → 合成 → 発報判定。"""
+        tx0, ty0, tx1, ty1 = self._analysis_tile_range()
+        n_x = tx1 - tx0 + 1
+        n_y = ty1 - ty0 + 1
+        n_grid = 2 ** ZOOM
+
+        coords: list[tuple[int, int]] = []
+        for tx in range(tx0, tx1 + 1):
+            for ty in range(ty0, ty1 + 1):
+                if not (0 <= ty < n_grid):
+                    continue
+                coords.append((tx, ty))
+
+        async def _one(tx: int, ty: int) -> tuple[tuple[int, int], bytes | None]:
+            wx = tx % n_grid
+            return (tx, ty), await self._fetch_tile_bytes(
+                session, basetime, validtime, tx=wx, ty=ty,
+            )
+
+        results = await asyncio.gather(*(_one(tx, ty) for tx, ty in coords))
+        tiles_data: dict[tuple[int, int], bytes | None] = dict(results)
+
+        # 少なくとも中央タイルが取れなかったら失敗扱い
+        center_key = (self._tile_x, self._tile_y)
+        if tiles_data.get(center_key) is None:
             return None
-        return await self._analyze_tile(img_bytes)
+
+        gx = self._tile_x * 256 + self._px
+        gy = self._tile_y * 256 + self._py
+        return await self.hass.async_add_executor_job(
+            _sync_check_tile_grid,
+            tiles_data, tx0, ty0, n_x, n_y,
+            gx, gy, self._radius_pixels,
+            self.threshold_mm, self._coverage_ratio, self.trigger_coverage,
+        )
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -397,18 +450,24 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         if result["first_rain_in_minutes"] is None:
                             result["first_rain_in_minutes"] = mins
 
-                # ③ 実況タイル取得（N1 の最新）+ camera 用にバイトを保存
+                # ③ 実況タイル (N1 の最新) を _fetch_and_check_tile (グリッド解析)
+                # で評価。旧: 単一タイル取得 & 単一タイル解析 → 半径が
+                # タイル境界を跨ぐケースで取りこぼしがあった。
                 if entries_n1:
                     obs_entry = entries_n1[0]  # 最も新しい観測時刻
                     obs_basetime  = obs_entry.get("basetime",  obs_entry["validtime"])
                     obs_validtime = obs_entry.get("validtime", obs_basetime)
-                    img_bytes = await self._fetch_tile_bytes(session, obs_basetime, obs_validtime)
-                    if img_bytes is not None:
-                        self.latest_observation_image     = img_bytes
+                    checked_obs = await self._fetch_and_check_tile(
+                        session, obs_basetime, obs_validtime,
+                    )
+                    if checked_obs is not None:
+                        obs_triggered, obs_mm, obs_cov = checked_obs
+                        # 中央タイルは _fetch_and_check_tile 内で取得済み。
+                        # camera 側は独自にタイル取得するので単純に basetime/validtime
+                        # だけ持っておけば良い (latest_observation_image は legacy)。
                         self.latest_observation_at        = _parse_jma_dt(obs_validtime)
                         self.latest_observation_basetime  = obs_basetime
                         self.latest_observation_validtime = obs_validtime
-                        obs_triggered, obs_mm, obs_cov = await self._analyze_tile(img_bytes)
                         result["rain_observed"]     = obs_triggered
                         result["observed_mm"]       = obs_mm
                         result["observed_coverage"] = obs_cov
