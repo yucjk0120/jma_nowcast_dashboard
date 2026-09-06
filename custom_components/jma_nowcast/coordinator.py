@@ -171,6 +171,12 @@ def _sync_check_tile_grid(
     else:
         triggered = ratio >= coverage_ratio
 
+    # ここでは max_mm を素で返す。「rain=False で mm>0」不整合の
+    # 揃え直しは呼び出し側 (_async_update_data) で用途別に行う:
+    #   - 実況 (observed_mm): threshold 無視で max_mm を出す
+    #     (「今起こっている生の事実」を知りたいセマンティクス)
+    #   - 予報 (forecasts[mins].mm): rain=False なら 0.0 に揃える
+    #     (発報用の判定と表示値の一貫性を優先)
     return triggered, round(max_mm, 1), round(ratio, 3)
 
 
@@ -440,9 +446,11 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         }
                         continue
                     has_rain, intensity, coverage_ratio = checked
+                    # 予報 mm は発報基準と整合させる (rain=False → 0)
+                    display_mm = intensity if has_rain else 0.0
                     result["forecasts"][mins] = {
                         "rain":          has_rain,
-                        "mm":            intensity,
+                        "mm":            display_mm,
                         "coverage":      coverage_ratio,
                         "forecast_time": vt_dt.strftime("%H:%M"),
                     }
