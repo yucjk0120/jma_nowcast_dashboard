@@ -171,12 +171,11 @@ def _sync_check_tile_grid(
     else:
         triggered = ratio >= coverage_ratio
 
-    # ここでは max_mm を素で返す。「rain=False で mm>0」不整合の
-    # 揃え直しは呼び出し側 (_async_update_data) で用途別に行う:
-    #   - 実況 (observed_mm): threshold 無視で max_mm を出す
-    #     (「今起こっている生の事実」を知りたいセマンティクス)
-    #   - 予報 (forecasts[mins].mm): rain=False なら 0.0 に揃える
-    #     (発報用の判定と表示値の一貫性を優先)
+    # mm 値は常に max_mm を素で返す (実況・予報どちらでも同じ扱い)。
+    # 発報判定 (triggered) とは分離: sensor 値は「範囲内で最も強い雨量」
+    # という観測値、triggered は「閾値/coverage による発報条件成立」。
+    # 例: threshold=1.0 で 0.5mm だけがタイルにある場合 → triggered=False
+    # だが mm=0.5 が出る。「発報しない弱い雨」も可視化される。
     return triggered, round(max_mm, 1), round(ratio, 3)
 
 
@@ -446,11 +445,14 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         }
                         continue
                     has_rain, intensity, coverage_ratio = checked
-                    # 予報 mm は発報基準と整合させる (rain=False → 0)
-                    display_mm = intensity if has_rain else 0.0
+                    # mm は生の max_mm をそのまま公開する (実況・予報どちらも)。
+                    # 「範囲内にどれだけ強い雨があるか」の観測値としての意味を
+                    # 優先し、閾値/coverage 判定 (=has_rain フラグ) とは分離する。
+                    # 例: 閾値 1.0 で 0.5mm のみのタイル → rain=False かつ mm=0.5。
+                    # 「発報しない弱い雨」も見えるようにするため。
                     result["forecasts"][mins] = {
                         "rain":          has_rain,
-                        "mm":            display_mm,
+                        "mm":            intensity,
                         "coverage":      coverage_ratio,
                         "forecast_time": vt_dt.strftime("%H:%M"),
                     }
