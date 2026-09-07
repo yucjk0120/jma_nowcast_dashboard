@@ -490,6 +490,7 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     rain_observed=result["rain_observed"],
                     first_rain_min=result.get("first_rain_in_minutes"),
                     now=now,
+                    current_result=result,
                 )
                 result["alert"]             = self._is_alert_active()
                 result["alert_state"]       = self._state
@@ -519,14 +520,25 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         def __missing__(self, key: str) -> str:
             return f"?{key}?"
 
-    def _placeholders_for(self, minutes: int, is_test: bool) -> dict[str, Any]:
+    def _placeholders_for(
+        self,
+        minutes: int,
+        is_test: bool,
+        data_override: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """メッセージテンプレートに差し込むプレースホルダ dict を作る。
 
         数値は float / bool として提供する (Jinja の {% if %} 条件で
         比較しやすくするため)。旧 str.format_map 記法でも str() 経由で
         自然に描画される。
+
+        data_override: 現 update ループ中に自動発報を出す際、self.data は
+        まだ前回の値 (DataUpdateCoordinator は _async_update_data 完了後に
+        self.data を差し替えるため) なので、今回の result dict を明示的に
+        渡すことで最新値でレンダリングする。テスト再生 (手動押下) では
+        None を渡し、self.data から読む。
         """
-        data = self.data or {}
+        data = data_override if data_override is not None else (self.data or {})
         forecasts = data.get("forecasts", {}) if isinstance(data, dict) else {}
 
         def _mm(key: int) -> float:
@@ -576,7 +588,12 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "test":             is_test,
         }
 
-    def _render_alert_message(self, minutes: int, is_test: bool) -> str | None:
+    def _render_alert_message(
+        self,
+        minutes: int,
+        is_test: bool,
+        data_override: dict[str, Any] | None = None,
+    ) -> str | None:
         """バケットのテンプレートを埋めた文字列を返す。
 
         テンプレートに `{{` または `{%` が含まれれば **Jinja2** として
@@ -594,7 +611,7 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not template and is_test:
             template = f"{minutes}分後アラートのテスト再生です。"
 
-        ph = self._placeholders_for(minutes, is_test)
+        ph = self._placeholders_for(minutes, is_test, data_override=data_override)
 
         if "{{" in template or "{%" in template:
             # 遅延 import: helpers.template は HA コアに含まれるが、
@@ -617,7 +634,13 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             return template
 
-    async def async_play_alert(self, minutes: int, *, is_test: bool = False) -> None:
+    async def async_play_alert(
+        self,
+        minutes: int,
+        *,
+        is_test: bool = False,
+        forecast_data: dict[str, Any] | None = None,
+    ) -> None:
         """指定バケットのアラート音声を再生する。
 
         本番発報 (is_test=False): 設定が無効/未設定なら何もしない。
@@ -634,7 +657,9 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             cfg = self.alert_configs.get(minutes)
             if not cfg or not cfg[0]:  # enabled=False or missing
                 return
-        message = self._render_alert_message(minutes, is_test=is_test)
+        message = self._render_alert_message(
+            minutes, is_test=is_test, data_override=forecast_data,
+        )
         if not message:
             return
         _LOGGER.info(
@@ -671,6 +696,7 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         rain_observed: bool,
         first_rain_min: int | None,
         now: datetime,
+        current_result: dict[str, Any] | None = None,
     ) -> None:
         # 観測タイムスタンプの更新
         if rain_observed:
@@ -683,9 +709,17 @@ class JmaNowcastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # READY → ALERTED 遷移時にアラート音声を再生 (最初に降る
                 # バケットの設定を使用)。fire-and-forget でメイン更新
                 # フローをブロックしない。
+                # current_result を forecast_data として渡すことで、まだ
+                # self.data に反映されていない最新値でテンプレートを
+                # レンダリングする (DataUpdateCoordinator は _async_update_data
+                # 完了後に self.data を差し替えるため、非同期タスク側で
+                # 素朴に self.data を読むと 1 世代前の値になり得る)。
                 if first_rain_min in (10, 20, 30, 60):
                     self.hass.async_create_task(
-                        self.async_play_alert(first_rain_min)
+                        self.async_play_alert(
+                            first_rain_min,
+                            forecast_data=current_result,
+                        )
                     )
             return
 

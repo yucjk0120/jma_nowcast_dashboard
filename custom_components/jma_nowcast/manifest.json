@@ -1,7 +1,7 @@
 {
   "domain": "jma_nowcast",
   "name": "JMA Nowcast \u964d\u6c34\u4e88\u6e2c",
-  "version": "1.5.9",
+  "version": "1.5.10",
   "documentation": "https://github.com/yucjk0120/jma_nowcast_dashboard",
   "issue_tracker": "https://github.com/yucjk0120/jma_nowcast_dashboard/issues",
   "requirements": [
